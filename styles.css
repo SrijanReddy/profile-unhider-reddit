@@ -1,0 +1,380 @@
+/* Reddit Profile Unhider - styles.css */
+
+/* ── Trigger wrap ── */
+#rpu-trigger-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rpu-trigger-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 2px solid #ff4500;
+  border-radius: 8px;
+  padding: 18px 28px 14px;
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rpu-trigger-inner {
+    background: #1a1a1b;
+  }
+}
+
+.rpu-trigger-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ff4500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.rpu-trigger-sub {
+  font-size: 12px;
+  color: #878a8c;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  text-align: center;
+}
+
+#rpu-reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 28px;
+  border-radius: 20px;
+  border: none;
+  background: #ff4500;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#rpu-reveal-btn:hover {
+  background: #e03d00;
+  transform: translateY(-1px);
+}
+
+#rpu-reveal-btn:active { transform: translateY(0); }
+
+#rpu-reveal-btn.rpu-active {
+  background: #343536;
+}
+
+#rpu-reveal-btn svg { flex-shrink: 0; }
+
+/* ── Panel ── */
+#rpu-panel {
+  margin: 0 0 16px;
+  background: #fff;
+  border: 1px solid #edeff1;
+  border-radius: 4px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* FIX: prevent sidebar from clipping the panel */
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  #rpu-panel { background: #1a1a1b; border-color: #343536; }
+}
+
+/* Header */
+#rpu-panel .rpu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edeff1;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-head { border-color: #343536; }
+}
+
+#rpu-panel .rpu-head-left { display: flex; align-items: center; gap: 10px; }
+
+#rpu-panel .rpu-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #ff4500; display: flex; align-items: center;
+  justify-content: center; font-size: 15px; color: #fff;
+  font-weight: 700; flex-shrink: 0;
+}
+
+#rpu-panel .rpu-username {
+  font-size: 15px; font-weight: 700; color: #1c1c1c; margin: 0; line-height: 1.2;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-username { color: #d7dadc; }
+}
+
+#rpu-panel .rpu-sub-label {
+  font-size: 12px; color: #878a8c; margin: 2px 0 0;
+  display: flex; align-items: center; gap: 5px;
+}
+
+#rpu-panel .rpu-index-badge {
+  display: inline-block; background: #f6f7f8; border: 1px solid #edeff1;
+  border-radius: 3px; font-size: 10px; padding: 1px 6px;
+  color: #878a8c; font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-index-badge { background: #272729; border-color: #343536; color: #818384; }
+}
+
+#rpu-panel .rpu-close-btn {
+  background: none; border: none; cursor: pointer; color: #878a8c;
+  padding: 6px; border-radius: 4px; display: flex;
+  align-items: center; justify-content: center; transition: background 0.1s;
+  flex-shrink: 0;
+}
+#rpu-panel .rpu-close-btn:hover { background: #f6f7f8; color: #1c1c1c; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-close-btn:hover { background: #272729; color: #d7dadc; }
+}
+
+/* Tabs */
+#rpu-panel .rpu-tabs {
+  display: flex; border-bottom: 1px solid #edeff1; padding: 0 16px;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-tabs { border-color: #343536; }
+}
+
+#rpu-panel .rpu-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 12px; font-size: 14px; font-weight: 700; color: #878a8c;
+  border: none; background: none; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font-family: inherit; transition: color 0.1s; white-space: nowrap;
+}
+#rpu-panel .rpu-tab:hover { color: #1c1c1c; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-tab:hover { color: #d7dadc; }
+}
+#rpu-panel .rpu-tab.rpu-tab-active { color: #ff4500; border-bottom-color: #ff4500; }
+
+/* Content */
+#rpu-panel .rpu-content {
+  padding: 8px; display: flex; flex-direction: column; gap: 4px; min-height: 80px;
+}
+
+/* Loading */
+#rpu-panel .rpu-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 32px 16px; color: #878a8c; font-size: 14px;
+  text-align: center;
+}
+#rpu-panel .rpu-spinner {
+  width: 18px; height: 18px; border: 2px solid #edeff1;
+  border-top-color: #ff4500; border-radius: 50%;
+  animation: rpu-spin 0.7s linear infinite; flex-shrink: 0;
+}
+@keyframes rpu-spin { to { transform: rotate(360deg); } }
+
+/* Empty / Error */
+#rpu-panel .rpu-empty,
+#rpu-panel .rpu-error {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; padding: 32px 16px; text-align: center; color: #878a8c; font-size: 14px;
+}
+#rpu-panel .rpu-empty-sub { font-size: 12px; color: #878a8c; margin: 0; }
+
+/* Cards — FIX sidebar overlap: ensure cards don't overflow */
+#rpu-panel .rpu-card {
+  display: flex; gap: 10px; padding: 10px; border-radius: 4px;
+  border: 1px solid #edeff1; align-items: flex-start;
+  background: #fff; transition: border-color 0.1s;
+  box-sizing: border-box; min-width: 0; overflow: hidden;
+}
+#rpu-panel .rpu-card:hover { border-color: #0079d3; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-card { background: #1a1a1b; border-color: #343536; }
+  #rpu-panel .rpu-card:hover { border-color: #818384; }
+}
+
+/* Vote */
+#rpu-panel .rpu-vote {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px; min-width: 30px; padding-top: 2px; flex-shrink: 0;
+}
+#rpu-panel .rpu-score { font-size: 11px; font-weight: 700; color: #1c1c1c; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-score { color: #d7dadc; }
+}
+
+/* Thumbnail */
+#rpu-panel .rpu-thumb {
+  width: 70px; height: 52px; border-radius: 4px;
+  background: #f6f7f8; border: 1px solid #edeff1;
+  flex-shrink: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-thumb { background: #272729; border-color: #343536; }
+}
+#rpu-panel .rpu-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Card body — FIX overflow */
+#rpu-panel .rpu-card-body { flex: 1; min-width: 0; overflow: hidden; }
+
+#rpu-panel .rpu-card-meta {
+  font-size: 11px; color: #878a8c; margin-bottom: 3px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+}
+#rpu-panel .rpu-dot { color: #878a8c; }
+
+#rpu-panel .rpu-subreddit {
+  color: #ff4500; font-weight: 700; text-decoration: none;
+}
+#rpu-panel .rpu-subreddit:hover { text-decoration: underline; }
+
+#rpu-panel .rpu-card-title {
+  font-size: 14px; font-weight: 500; color: #1c1c1c;
+  line-height: 1.4; text-decoration: none; display: block; margin-bottom: 5px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+#rpu-panel .rpu-card-title:hover { color: #0079d3; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-card-title { color: #d7dadc; }
+  #rpu-panel .rpu-card-title:hover { text-decoration: underline; }
+}
+
+#rpu-panel .rpu-card-footer { display: flex; align-items: center; gap: 10px; }
+
+#rpu-panel .rpu-comments-count {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 12px; color: #878a8c; font-weight: 700;
+}
+
+#rpu-panel .rpu-nsfw-tag {
+  font-size: 10px; font-weight: 700; color: #ff585b;
+  border: 1px solid #ff585b; border-radius: 2px; padding: 0 4px;
+}
+
+/* Comment specific */
+#rpu-panel .rpu-comment-thread {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: #878a8c;
+  text-decoration: none; margin-bottom: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+}
+#rpu-panel .rpu-comment-thread:hover { color: #0079d3; text-decoration: underline; }
+
+#rpu-panel .rpu-comment-body {
+  font-size: 13px; color: #1c1c1c; line-height: 1.5;
+  margin: 0 0 6px; white-space: pre-wrap; word-break: break-word;
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-comment-body { color: #d7dadc; }
+}
+
+#rpu-panel .rpu-comment-body--empty {
+  color: #878a8c; font-style: italic;
+}
+
+#rpu-panel .rpu-view-link {
+  font-size: 12px; color: #0079d3; font-weight: 700; text-decoration: none;
+}
+#rpu-panel .rpu-view-link:hover { text-decoration: underline; }
+
+/* Load more */
+#rpu-panel .rpu-load-more-wrap {
+  padding: 10px 16px; border-top: 1px solid #edeff1; display: flex; justify-content: center;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-load-more-wrap { border-color: #343536; }
+}
+
+#rpu-panel .rpu-load-more-btn {
+  font-size: 14px; font-weight: 700; padding: 8px 32px;
+  border-radius: 20px; border: 1px solid #edeff1;
+  background: transparent; color: #1c1c1c;
+  cursor: pointer; font-family: inherit; transition: background 0.1s, border-color 0.1s;
+}
+#rpu-panel .rpu-load-more-btn:hover { background: #f6f7f8; border-color: #878a8c; }
+#rpu-panel .rpu-load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-load-more-btn { border-color: #343536; color: #d7dadc; }
+  #rpu-panel .rpu-load-more-btn:hover { background: #272729; border-color: #818384; }
+}
+
+/* ── Disclaimer ── */
+#rpu-disclaimer {
+  padding: 0 16px 12px;
+}
+
+.rpu-disclaimer-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(255, 69, 0, 0.06);
+  border: 1px solid rgba(255, 69, 0, 0.25);
+  box-shadow: 0 0 14px rgba(255, 69, 0, 0.12), 0 0 28px rgba(255, 69, 0, 0.06);
+}
+
+.rpu-disclaimer-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 69, 0, 0.1);
+  border: 1px solid rgba(255, 69, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(255, 69, 0, 0.18);
+}
+
+.rpu-disclaimer-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rpu-disclaimer-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff4500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.rpu-disclaimer-body {
+  font-size: 12px;
+  color: #878a8c;
+  line-height: 1.4;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.rpu-disclaimer-link {
+  color: #ff4500;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.rpu-disclaimer-link:hover {
+  text-decoration: underline;
+}
