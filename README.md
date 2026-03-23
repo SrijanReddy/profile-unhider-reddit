@@ -2,6 +2,8 @@
 
 Chrome extension that reveals post and comment history for hidden Reddit profiles.
 
+More in - https://profile-unhider.netlify.app/
+
 ## How it works
 1. Navigate to any Reddit user profile (reddit.com/user/username)
 2. If the profile is hidden, a **"Reveal activity"** button appears below the hidden message
