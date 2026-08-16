@@ -1,0 +1,90 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.popup { width: 290px; background: #0a0a0b; }
+
+.header {
+  padding: 14px 16px; border-bottom: 1px solid #1f1f1f;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(180deg, #110a08 0%, #0a0a0b 100%);
+}
+.logo { display: flex; align-items: center; gap: 9px; }
+.logo-icon {
+  width: 30px; height: 30px;
+  background: rgba(255,69,0,0.1); border: 1px solid rgba(255,69,0,0.35);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 10px rgba(255,69,0,0.15);
+}
+.logo-name { font-size: 13px; font-weight: 600; color: #fafafa; display: block; }
+.logo-sub { font-size: 10px; color: #52525b; }
+.toggle {
+  width: 38px; height: 21px; background: #ff4500; border-radius: 11px;
+  position: relative; cursor: pointer; border: none; flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(255,69,0,0.4); transition: background 0.2s, box-shadow 0.2s;
+}
+.toggle.off { background: #27272a; box-shadow: none; }
+.toggle-knob {
+  position: absolute; top: 2.5px; right: 2.5px;
+  width: 16px; height: 16px; background: white; border-radius: 50%; transition: right 0.2s;
+}
+.toggle.off .toggle-knob { right: 19.5px; }
+
+.status-box {
+  margin: 12px; background: #0f0f10; border: 1px solid #1f1f1f;
+  border-radius: 10px; padding: 11px 13px;
+  display: flex; align-items: center; gap: 11px;
+  position: relative; overflow: hidden; transition: border-color 0.3s, box-shadow 0.3s;
+}
+.status-box.detected { border-color: rgba(255,69,0,0.3); box-shadow: 0 0 16px rgba(255,69,0,0.06); }
+.status-glow {
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,69,0,0.5), transparent);
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #3f3f46; transition: background 0.3s, box-shadow 0.3s; }
+.status-dot.active { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+.status-dot.detected { background: #ff4500; box-shadow: 0 0 8px rgba(255,69,0,0.7); }
+.status-dot.idle { background: #3f3f46; }
+.status-dot.disabled { background: #3f3f46; }
+.status-text strong { font-size: 12px; font-weight: 500; color: #fafafa; display: block; margin-bottom: 1px; }
+.status-text span { font-size: 11px; color: #52525b; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 12px 8px; }
+.stat {
+  background: #0f0f10; border: 1px solid #1f1f1f;
+  border-radius: 10px; padding: 12px 10px; text-align: center;
+  position: relative; overflow: hidden;
+}
+.stat-glow {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 60%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,69,0,0.4), transparent);
+}
+.stat-num { font-size: 22px; font-weight: 700; color: #ff4500; line-height: 1; margin-bottom: 4px; text-shadow: 0 0 12px rgba(255,69,0,0.4); }
+.stat-label { font-size: 10px; color: #52525b; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.reset-wrap { margin: 0 12px 12px; }
+.reset-btn {
+  width: 100%; padding: 8px; background: transparent;
+  border: 1px solid #1f1f1f; border-radius: 8px;
+  font-size: 11px; color: #52525b; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.reset-btn:hover { border-color: #ff4500; color: #ff4500; }
+
+.footer {
+  border-top: 1px solid #1f1f1f; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(0deg, #0d0a09 0%, #0a0a0b 100%);
+}
+.site-link { font-size: 11px; color: #3f3f46; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
+.site-link:hover { color: #ff4500; }
+.version { font-size: 10px; color: #27272a; }
+
+.refresh-icon-btn {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: rgba(255,69,0,0.08); border: 1px solid rgba(255,69,0,0.25);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; color: #ff4500;
+  transition: background 0.15s, transform 0.3s;
+}
+.refresh-icon-btn:hover { background: rgba(255,69,0,0.18); transform: rotate(180deg); }

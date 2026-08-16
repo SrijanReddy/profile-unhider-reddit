@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Profile Unhider</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+<div class="popup">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff4500" stroke-width="2.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div>
+        <span class="logo-name">Profile Unhider</span>
+        <span class="logo-sub">reddit.com</span>
+      </div>
+    </div>
+    <div class="toggle" id="toggle"><div class="toggle-knob"></div></div>
+  </div>
+
+  <div class="status-box" id="status-box">
+    <div class="status-glow"></div>
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-text">
+      <strong id="status-title">Checking…</strong>
+      <span id="status-sub">Detecting current page</span>
+    </div>
+    <button class="refresh-icon-btn" id="refresh-btn" title="Refresh page">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+    </button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-glow"></div>
+      <div class="stat-num" id="stat-profiles">0</div>
+      <div class="stat-label">Profiles revealed</div>
+    </div>
+    <div class="stat">
+      <div class="stat-glow"></div>
+      <div class="stat-num" id="stat-posts">0</div>
+      <div class="stat-label">Posts surfaced</div>
+    </div>
+  </div>
+
+  <div class="reset-wrap">
+    <button class="reset-btn" id="reset-btn">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+      Reset stats
+    </button>
+  </div>
+
+  <div class="footer">
+    <a class="site-link" href="https://profile-unhider.netlify.app" target="_blank" rel="noopener">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      profile-unhider.netlify.app
+    </a>
+    <span class="version">v3.0</span>
+  </div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>
