@@ -2,6 +2,8 @@
 
 Chrome extension that reveals post and comment history for hidden Reddit profiles.
 
+<a href="https://www.producthunt.com/products/profile-unhider?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-profile-unhider" target="_blank" rel="noopener noreferrer"><img alt="Profile Unhider  - Unhide Reddit activity using Reddit's own public index | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1224663&amp;theme=light&amp;t=1786942922714"></a>
+
 ## How it works
 1. Navigate to any Reddit user profile (reddit.com/user/username)
 2. If the profile is hidden, a **"Reveal activity"** button appears below the hidden message
