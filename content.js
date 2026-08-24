@@ -195,6 +195,66 @@
     return { items: results.filter(function(c) { return c !== null; }), after: cursor };
   }
 
+  /* ── insights: subreddit activity scan ── */
+  async function fetchSubredditPage(kind, username, after) {
+    let url;
+    if (kind === "comment") {
+      const q = encodeURIComponent('Author:"' + username + '"');
+      url = "https://www.reddit.com/search.json?q=" + q + "&type=comment&limit=100&sort=new&raw_json=1";
+    } else {
+      url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
+    }
+    if (after) url += "&after=" + encodeURIComponent(after);
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (res.status === 429) { const e = new Error("Rate limited by Reddit — showing partial results"); e.rateLimited = true; throw e; }
+    if (!res.ok) throw new Error("Reddit API returned " + res.status);
+    const json = await res.json();
+    return { items: json.data.children.map((c) => c.data), after: json.data.after || null };
+  }
+
+  // Walks every page of a user's posts or comments, tallying per-subreddit counts into `subs`.
+  // Only reads the lightweight subreddit field off each stub — comments are NOT hydrated here,
+  // since that would cost one extra thread fetch per comment just to learn a subreddit we already know.
+  async function scanSubredditActivity(kind, username, subs, onPage, shouldCancel) {
+    let after = null, pages = 0, count = 0;
+    const MAX_PAGES = 40; // Reddit's search index caps out around this many pages anyway
+    do {
+      if (shouldCancel()) return { count, cancelled: true };
+      let page;
+      try {
+        page = await fetchSubredditPage(kind, username, after);
+      } catch (e) {
+        if (e.rateLimited) return { count, cancelled: true };
+        throw e;
+      }
+      for (const item of page.items) {
+        const key = item.subreddit || "unknown";
+        const entry = subs.get(key) || { posts: 0, comments: 0 };
+        if (kind === "comment") entry.comments++; else entry.posts++;
+        subs.set(key, entry);
+      }
+      count += page.items.length;
+      pages++;
+      after = page.after;
+      onPage(pages, count);
+    } while (after && pages < MAX_PAGES);
+    return { count, cancelled: false };
+  }
+
+  async function scanInsights(username, onProgress, shouldCancel) {
+    const subs = new Map();
+    const postsResult = await scanSubredditActivity("link", username, subs, (page, count) => {
+      onProgress({ phase: "posts", page, totalPosts: count, totalComments: 0 });
+    }, shouldCancel);
+    const totalPosts = postsResult.count;
+    if (postsResult.cancelled) return { subs, totalPosts, totalComments: 0, cancelled: true };
+
+    const commentsResult = await scanSubredditActivity("comment", username, subs, (page, count) => {
+      onProgress({ phase: "comments", page, totalPosts, totalComments: count });
+    }, shouldCancel);
+    return { subs, totalPosts, totalComments: commentsResult.count, cancelled: commentsResult.cancelled };
+  }
+
   /* ── renderers ── */
   function upArrow() {
     return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff4500" stroke-width="2.5" style="display:block"><polyline points="18 15 12 9 6 15"/></svg>`;
@@ -265,6 +325,31 @@
       </div>`;
   }
 
+  function renderInsights(data) {
+    const entries = Array.from(data.subs.entries())
+      .map(([sub, c]) => ({ sub, posts: c.posts, comments: c.comments, total: c.posts + c.comments }))
+      .sort((a, b) => b.total - a.total);
+    const maxTotal = entries.length ? entries[0].total : 1;
+
+    const rows = entries.map((e) => `
+      <div class="rpu-insight-row">
+        <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
+        <div class="rpu-insight-bar-track">
+          <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
+        </div>
+        <span class="rpu-insight-count">${e.total}${e.posts && e.comments ? ` <span class="rpu-insight-split">(${e.posts}p·${e.comments}c)</span>` : ""}</span>
+      </div>`).join("");
+
+    return `
+      <div class="rpu-insight-summary">
+        <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${entries.length}</span><span class="rpu-insight-stat-label">subreddits</span></div>
+        <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalPosts}</span><span class="rpu-insight-stat-label">posts</span></div>
+        <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalComments}</span><span class="rpu-insight-stat-label">comments</span></div>
+      </div>
+      ${data.cancelled ? `<p class="rpu-insight-note">Scan stopped early (rate limited) — showing partial results.</p>` : ""}
+      <div class="rpu-insight-list">${rows || '<p class="rpu-empty-sub">No activity found.</p>'}</div>`;
+  }
+
   /* ── panel ── */
   function buildPanel(username) {
     const panel = document.createElement("div");
@@ -290,6 +375,10 @@
         <button class="rpu-tab" data-tab="comments">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Comments
+        </button>
+        <button class="rpu-tab" data-tab="insights">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          Insights
         </button>
       </div>
       <div class="rpu-sort-bar" id="rpu-sort-bar">
@@ -377,6 +466,7 @@
       time: "all",
       posts: { items: [], after: null, loaded: false },
       comments: { items: [], after: null, loaded: false },
+      insights: { loaded: false, data: null },
     };
 
     const getEl = (id) => document.getElementById(id);
@@ -390,12 +480,17 @@
       if (el) el.style.display = "none";
     }
 
+    function clearContent() {
+      const content = getEl("rpu-content");
+      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
+    }
+
     function renderItems() {
       const tab = state.activeTab;
       const { items, after } = state[tab];
       const content = getEl("rpu-content");
       if (!content) return;
-      content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error").forEach((el) => el.remove());
+      clearContent();
       hideLoading();
 
       if (items.length === 0) {
@@ -422,10 +517,11 @@
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
         btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab);
       });
-      if (state[tab].loaded) { renderItems(); return; }
-      getEl("rpu-content").querySelectorAll(".rpu-card, .rpu-empty, .rpu-error").forEach((el) => el.remove());
-      showLoading(tab === "comments" ? "Fetching comments… (scanning threads)" : "Fetching posts…");
       getEl("rpu-load-more-wrap").style.display = "none";
+      if (tab === "insights") { await loadInsights(); return; }
+      if (state[tab].loaded) { renderItems(); return; }
+      clearContent();
+      showLoading(tab === "comments" ? "Fetching comments… (scanning threads)" : "Fetching posts…");
       try {
         const result = tab === "posts"
           ? await fetchPosts(username, null, state.sort, state.time)
@@ -442,6 +538,41 @@
             <span>Failed to fetch ${tab}: ${esc(err.message)}</span>
           </div>`);
       }
+    }
+
+    async function loadInsights() {
+      if (state.insights.loaded) { renderInsightsView(); return; }
+      clearContent();
+      showLoading("Scanning subreddits… (page 1)");
+      try {
+        const data = await scanInsights(
+          username,
+          (progress) => {
+            if (state.activeTab !== "insights") return;
+            const found = progress.totalPosts + progress.totalComments;
+            showLoading(`Scanning subreddits… (${progress.phase}, page ${progress.page}, ${found} found)`);
+          },
+          () => state.activeTab !== "insights"
+        );
+        if (data.cancelled) return; // user navigated away mid-scan — don't cache partial data, re-scan next visit
+        state.insights.data = data;
+        state.insights.loaded = true;
+        if (state.activeTab === "insights") renderInsightsView();
+      } catch (err) {
+        if (state.activeTab !== "insights") return;
+        hideLoading();
+        getEl("rpu-content").insertAdjacentHTML("beforeend", `
+          <div class="rpu-error">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Failed to scan subreddits: ${esc(err.message)}</span>
+          </div>`);
+      }
+    }
+
+    function renderInsightsView() {
+      clearContent();
+      hideLoading();
+      getEl("rpu-content").insertAdjacentHTML("beforeend", renderInsights(state.insights.data));
     }
 
     async function loadMore() {
@@ -479,13 +610,17 @@
       // Tab clicks
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
         btn.addEventListener("click", () => {
-          // Reset sort to new when switching tabs
-          state.sort = "new";
-          state.time = "all";
-          panelEl.querySelectorAll(".rpu-sort-btn").forEach(b => b.classList.remove("rpu-sort-active"));
-          panelEl.querySelector('[data-sort="new"]').classList.add("rpu-sort-active");
-          getEl("rpu-time-filter").style.display = "none";
-          loadTab(btn.dataset.tab);
+          const tab = btn.dataset.tab;
+          getEl("rpu-sort-bar").style.display = tab === "insights" ? "none" : "flex";
+          if (tab !== "insights") {
+            // Reset sort to new when switching tabs
+            state.sort = "new";
+            state.time = "all";
+            panelEl.querySelectorAll(".rpu-sort-btn").forEach(b => b.classList.remove("rpu-sort-active"));
+            panelEl.querySelector('[data-sort="new"]').classList.add("rpu-sort-active");
+            getEl("rpu-time-filter").style.display = "none";
+          }
+          loadTab(tab);
         });
       });
 
