@@ -160,7 +160,7 @@
 
 #rpu-panel .rpu-tab {
   display: flex; align-items: center; gap: 6px;
-  padding: 10px 12px; font-size: 14px; font-weight: 700; color: #878a8c;
+  padding: 10px 12px 16px; font-size: 14px; font-weight: 700; color: #878a8c;
   border: none; background: none; cursor: pointer;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
   font-family: inherit; transition: color 0.1s; white-space: nowrap;
@@ -413,7 +413,9 @@
 #rpu-panel .rpu-sort-options { display: flex; gap: 4px; }
 
 #rpu-panel .rpu-sort-btn {
-  padding: 3px 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
+  padding: 6px 10px;
   border-radius: 20px;
   border: 1px solid #edeff1;
   background: transparent;
@@ -440,3 +442,55 @@
 @media (prefers-color-scheme: dark) {
   #rpu-panel .rpu-time-select { border-color: #343536; background: #1a1a1b; color: #d7dadc; }
 }
+
+/* ── Insights ── */
+#rpu-panel .rpu-insight-summary {
+  display: flex; gap: 8px; padding: 4px 4px 12px;
+}
+#rpu-panel .rpu-insight-stat {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 12px 8px; border-radius: 6px;
+  background: #f6f7f8; border: 1px solid #edeff1;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-insight-stat { background: #272729; border-color: #343536; }
+}
+#rpu-panel .rpu-insight-stat-num { font-size: 18px; font-weight: 700; color: #ff4500; line-height: 1.2; }
+#rpu-panel .rpu-insight-stat-label { font-size: 11px; color: #878a8c; font-weight: 600; }
+
+#rpu-panel .rpu-insight-note {
+  font-size: 12px; color: #878a8c; text-align: center; margin: 0 0 10px; font-style: italic;
+}
+
+#rpu-panel .rpu-insight-list { display: flex; flex-direction: column; gap: 2px; }
+
+#rpu-panel .rpu-insight-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px 4px;
+}
+
+#rpu-panel .rpu-insight-sub {
+  flex: 0 0 auto; min-width: 90px; max-width: 140px;
+  font-size: 12px; font-weight: 700; color: #ff4500; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#rpu-panel .rpu-insight-sub:hover { text-decoration: underline; }
+
+#rpu-panel .rpu-insight-bar-track {
+  flex: 1; height: 8px; border-radius: 4px; background: #f6f7f8;
+  overflow: hidden; min-width: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-insight-bar-track { background: #272729; }
+}
+#rpu-panel .rpu-insight-bar-fill {
+  height: 100%; border-radius: 4px; background: #ff4500;
+}
+
+#rpu-panel .rpu-insight-count {
+  flex: 0 0 auto; font-size: 12px; font-weight: 700; color: #1c1c1c;
+  min-width: 32px; text-align: right;
+}
+@media (prefers-color-scheme: dark) {
+  #rpu-panel .rpu-insight-count { color: #d7dadc; }
+}
+#rpu-panel .rpu-insight-split { font-weight: 500; color: #878a8c; }
