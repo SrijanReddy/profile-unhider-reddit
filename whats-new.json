@@ -1,11 +1,16 @@
 {
-  "3.2.0": {
+  "3.3.0": {
     "title": "What's new",
     "items": [
       {
         "icon": "📊",
         "title": "Insights",
         "desc": "See a breakdown of any profile's activity by subreddit"
+      },
+      {
+        "icon": "💬",
+        "title": "Deeper comment history",
+        "desc": "Pull a profile's full comment history, not just what Reddit's own index happens to catch"
       },
       {
         "icon": "🏷️",
