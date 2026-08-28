@@ -325,20 +325,33 @@
       </div>`;
   }
 
-  function renderInsights(data) {
-    const entries = Array.from(data.subs.entries())
-      .map(([sub, c]) => ({ sub, posts: c.posts, comments: c.comments, total: c.posts + c.comments }))
-      .sort((a, b) => b.total - a.total);
-    const maxTotal = entries.length ? entries[0].total : 1;
-
-    const rows = entries.map((e) => `
+  function renderInsightRows(entries, maxTotal, query) {
+    if (!entries.length) {
+      return `
+        <div class="rpu-empty">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>${query ? `No activity in r/${esc(query)}` : "No activity found"}</span>
+        </div>`;
+    }
+    return entries.map((e) => `
       <div class="rpu-insight-row">
         <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
         <div class="rpu-insight-bar-track">
           <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
         </div>
-        <span class="rpu-insight-count">${e.total}${e.posts && e.comments ? ` <span class="rpu-insight-split">(${e.posts}p·${e.comments}c)</span>` : ""}</span>
+        <span class="rpu-insight-count">${e.total}${e.posts && e.comments ? ` <span class="rpu-insight-split">(${e.posts} posts · ${e.comments} comments)</span>` : ""}</span>
       </div>`).join("");
+  }
+
+  function insightEntries(data) {
+    return Array.from(data.subs.entries())
+      .map(([sub, c]) => ({ sub, posts: c.posts, comments: c.comments, total: c.posts + c.comments }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function renderInsights(data) {
+    const entries = insightEntries(data);
+    const maxTotal = entries.length ? entries[0].total : 1;
 
     return `
       <div class="rpu-insight-summary">
@@ -346,8 +359,13 @@
         <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalPosts}</span><span class="rpu-insight-stat-label">posts</span></div>
         <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalComments}</span><span class="rpu-insight-stat-label">comments</span></div>
       </div>
+      ${entries.length ? `
+      <div class="rpu-insight-search-wrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="rpu-insight-search" id="rpu-insight-search" placeholder="Search subreddit…" autocomplete="off" />
+      </div>` : ""}
       ${data.cancelled ? `<p class="rpu-insight-note">Scan stopped early (rate limited) — showing partial results.</p>` : ""}
-      <div class="rpu-insight-list">${rows || '<p class="rpu-empty-sub">No activity found.</p>'}</div>`;
+      <div class="rpu-insight-list" id="rpu-insight-list">${renderInsightRows(entries, maxTotal, "")}</div>`;
   }
 
   /* ── panel ── */
@@ -387,6 +405,10 @@
           <button class="rpu-sort-btn" data-sort="hot">Hot</button>
           <button class="rpu-sort-btn" data-sort="top">Top</button>
           <button class="rpu-sort-btn" data-sort="relevance">Relevance</button>
+        </div>
+        <div class="rpu-item-search-wrap">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="rpu-item-search" id="rpu-item-search" placeholder="Search…" autocomplete="off" />
         </div>
         <div class="rpu-time-filter" id="rpu-time-filter" style="display:none;">
           <select class="rpu-time-select" id="rpu-time-select">
@@ -482,7 +504,7 @@
 
     function clearContent() {
       const content = getEl("rpu-content");
-      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
+      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
     }
 
     function renderItems() {
@@ -512,11 +534,45 @@
       if (tab === "posts") trackPosts(items.length);
     }
 
+    function itemMatches(tab, item, q) {
+      if (tab === "posts") {
+        return (item.title || "").toLowerCase().includes(q) || (item.selftext || "").toLowerCase().includes(q);
+      }
+      return (item.body || "").toLowerCase().includes(q) || (item.link_title || "").toLowerCase().includes(q);
+    }
+
+    // Re-filters the already-loaded items for the active tab without re-fetching or
+    // re-tracking stats — kept separate from renderItems() so typing doesn't re-trigger trackPosts().
+    function applySearchFilter() {
+      const tab = state.activeTab;
+      if (tab === "insights" || !state[tab].loaded) return;
+      const { items, after } = state[tab];
+      const content = getEl("rpu-content");
+      if (!content || items.length === 0) return;
+      const query = (getEl("rpu-item-search").value || "").trim().toLowerCase();
+      content.querySelectorAll(".rpu-card, .rpu-empty").forEach((el) => el.remove());
+
+      const filtered = query ? items.filter((item) => itemMatches(tab, item, query)) : items;
+      if (filtered.length === 0) {
+        content.insertAdjacentHTML("beforeend", `
+          <div class="rpu-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>No ${tab} matching "${esc(query)}"</span>
+          </div>`);
+        getEl("rpu-load-more-wrap").style.display = after ? "flex" : "none";
+        return;
+      }
+      const html = filtered.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
+      content.insertAdjacentHTML("beforeend", html);
+      getEl("rpu-load-more-wrap").style.display = after ? "flex" : "none";
+    }
+
     async function loadTab(tab) {
       state.activeTab = tab;
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
         btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab);
       });
+      getEl("rpu-item-search").value = "";
       getEl("rpu-load-more-wrap").style.display = "none";
       if (tab === "insights") { await loadInsights(); return; }
       if (state[tab].loaded) { renderItems(); return; }
@@ -573,6 +629,19 @@
       clearContent();
       hideLoading();
       getEl("rpu-content").insertAdjacentHTML("beforeend", renderInsights(state.insights.data));
+      const searchInput = getEl("rpu-insight-search");
+      if (searchInput) searchInput.addEventListener("input", () => filterInsights(searchInput.value));
+    }
+
+    function filterInsights(query) {
+      const data = state.insights.data;
+      if (!data) return;
+      const entries = insightEntries(data);
+      const maxTotal = entries.length ? entries[0].total : 1;
+      const q = query.trim().replace(/^r\//i, "").toLowerCase();
+      const filtered = q ? entries.filter((e) => e.sub.toLowerCase().includes(q)) : entries;
+      const list = getEl("rpu-insight-list");
+      if (list) list.innerHTML = renderInsightRows(filtered, maxTotal, q);
     }
 
     async function loadMore() {
@@ -587,8 +656,14 @@
           : await fetchComments(username, state[tab].after, state.sort, state.time);
         state[tab].items = [...state[tab].items, ...result.items];
         state[tab].after = result.after;
-        const newHtml = result.items.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
-        getEl("rpu-content").insertAdjacentHTML("beforeend", newHtml);
+        const query = (getEl("rpu-item-search").value || "").trim().toLowerCase();
+        const matchingNew = query ? result.items.filter((item) => itemMatches(tab, item, query)) : result.items;
+        if (matchingNew.length) {
+          const staleEmpty = getEl("rpu-content").querySelector(".rpu-empty");
+          if (staleEmpty) staleEmpty.remove();
+          const newHtml = matchingNew.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
+          getEl("rpu-content").insertAdjacentHTML("beforeend", newHtml);
+        }
         getEl("rpu-load-more-wrap").style.display = result.after ? "flex" : "none";
         if (tab === "posts") trackPosts(result.items.length);
       } catch (err) { console.error("[RPU]", err); }
@@ -647,6 +722,9 @@
         resetTabState(state.activeTab);
         loadTab(state.activeTab);
       });
+
+      // Search within loaded posts/comments
+      getEl("rpu-item-search").addEventListener("input", applySearchFilter);
 
       panelEl.addEventListener("click", (e) => { if (e.target.id === "rpu-load-more") loadMore(); });
       getEl("rpu-close").addEventListener("click", closePanel);
