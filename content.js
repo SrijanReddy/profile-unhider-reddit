@@ -132,9 +132,10 @@
   }
 
   /* ── API: fetch posts ── */
-  async function fetchPosts(username, after, sort, time) {
+  async function fetchPosts(username, after, sort, time, limit) {
     sort = sort || "new";
-    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=25&sort=${sort}`;
+    limit = limit || 25;
+    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=${limit}&sort=${sort}`;
     if (sort === "top" && time) url += `&t=${time}`;
     if (after) url += `&after=${encodeURIComponent(after)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -180,7 +181,46 @@
     } catch(e) { return null; }
   }
 
-  async function fetchComments(username, after, sort, time) {
+  async function fetchComments(username, after, sort, time, limit) {
+    limit = limit || 25;
+    // Arctic Shift is a third-party archival index (not a live Reddit endpoint), so it
+    // isn't subject to the account's own "hide profile" listing restriction the way
+    // /user/<name>/comments.json is — it just returns whatever it has indexed.
+    // Pagination is time-cursor based: `after` here holds the created_utc (unix seconds)
+    // of the last item from the previous page, passed back as `before` since we always
+    // walk newest -> oldest. No `sort`/`time` mapping — the API only orders by time.
+    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&md2html=true&meta-app=profile-unhider";
+    if (after) url += "&before=" + encodeURIComponent(after);
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("Arctic Shift API returned " + res.status);
+    const json = await res.json();
+    const items = json.data || [];
+    const last = items[items.length - 1];
+    return {
+      items,
+      after: (last && items.length === limit) ? last.created_utc : null,
+    };
+
+    /* ── fallback (pre-2026-08-25 v2): direct /user/<name>/comments.json ──
+       Used before switching to Arctic Shift above. Uncomment this block and
+       comment out the block above to revert, if Arctic Shift ever stops working.
+    sort = sort || "new";
+    let url = "https://www.reddit.com/user/" + encodeURIComponent(username) + "/comments.json?limit=" + limit + "&sort=" + sort + "&raw_json=1";
+    if (sort === "top" && time) url += "&t=" + time;
+    if (after) url += "&after=" + encodeURIComponent(after);
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("Reddit API returned " + res.status);
+    const json = await res.json();
+    return {
+      items: json.data.children.map(function(c) { return c.data; }),
+      after: json.data.after || null,
+    };
+    */
+
+    /* ── fallback (pre-2026-08-25 v1): search.json + per-thread hydration ──
+       Used before switching to /user/<name>/comments.json above. Uncomment
+       this block and comment out the blocks above to revert, if the direct
+       listing endpoint ever stops working.
     sort = sort || "new";
     const q = encodeURIComponent('Author:"' + username + '"');
     let url = "https://www.reddit.com/search.json?q=" + q + "&type=comment&limit=25&sort=" + sort + "&raw_json=1";
@@ -193,17 +233,69 @@
     const cursor = json.data.after || null;
     const results = await Promise.all(stubs.map(function(s) { return hydrateStub(s, username); }));
     return { items: results.filter(function(c) { return c !== null; }), after: cursor };
+    */
+  }
+
+  // Reddit's listing/search endpoints cap `limit` at 100 and paginate via an opaque
+  // `after` cursor — there's no single request that returns "everything", so this
+  // walks every page (100 at a time) up front and hands back the full list.
+  async function fetchAllItems(tab, username, sort, time, onProgress) {
+    let after = null, pages = 0, all = [];
+    const MAX_PAGES = 40; // Reddit's search index caps out around this many pages anyway
+    do {
+      const result = tab === "posts"
+        ? await fetchPosts(username, after, sort, time, 100)
+        : await fetchComments(username, after, sort, time, 100);
+      all = all.concat(result.items);
+      after = result.after;
+      pages++;
+      onProgress(all.length);
+    } while (after && pages < MAX_PAGES);
+    return all;
   }
 
   /* ── insights: subreddit activity scan ── */
-  async function fetchSubredditPage(kind, username, after) {
-    let url;
-    if (kind === "comment") {
-      const q = encodeURIComponent('Author:"' + username + '"');
-      url = "https://www.reddit.com/search.json?q=" + q + "&type=comment&limit=100&sort=new&raw_json=1";
-    } else {
-      url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
+  // Insights used to run its own independent network scan of every post and comment
+  // (see the commented-out functions below) even when the Posts/Comments tabs had
+  // already fetched that exact same full history moments earlier. Now it just tallies
+  // whichever raw items it's handed — loadInsights() decides whether those items come
+  // from the tabs' cache or a fresh fetchAllItems() call.
+  function tallySubreddits(postItems, commentItems) {
+    const subs = new Map();
+    for (const item of postItems) {
+      const key = item.subreddit || "unknown";
+      const entry = subs.get(key) || { posts: 0, comments: 0 };
+      entry.posts++;
+      subs.set(key, entry);
     }
+    for (const item of commentItems) {
+      const key = item.subreddit || "unknown";
+      const entry = subs.get(key) || { posts: 0, comments: 0 };
+      entry.comments++;
+      subs.set(key, entry);
+    }
+    return { subs, totalPosts: postItems.length, totalComments: commentItems.length, cancelled: false };
+  }
+
+  /* ── fallback (pre-2026-08-25): Insights' own independent network scan ──
+     Uncomment fetchSubredditPage/scanSubredditActivity/scanInsights below (and
+     swap loadInsights() back to calling scanInsights()) to revert to Insights
+     always doing its own full fetch instead of reusing the tabs' cache.
+
+  async function fetchSubredditPage(kind, username, after) {
+    if (kind === "comment") {
+      let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=100&sort=desc&meta-app=profile-unhider";
+      if (after) url += "&before=" + encodeURIComponent(after);
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (res.status === 429) { const e = new Error("Rate limited — showing partial results"); e.rateLimited = true; throw e; }
+      if (!res.ok) throw new Error("Arctic Shift API returned " + res.status);
+      const json = await res.json();
+      const items = json.data || [];
+      const last = items[items.length - 1];
+      return { items, after: (last && items.length === 100) ? last.created_utc : null };
+    }
+
+    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (res.status === 429) { const e = new Error("Rate limited by Reddit — showing partial results"); e.rateLimited = true; throw e; }
@@ -212,12 +304,9 @@
     return { items: json.data.children.map((c) => c.data), after: json.data.after || null };
   }
 
-  // Walks every page of a user's posts or comments, tallying per-subreddit counts into `subs`.
-  // Only reads the lightweight subreddit field off each stub — comments are NOT hydrated here,
-  // since that would cost one extra thread fetch per comment just to learn a subreddit we already know.
   async function scanSubredditActivity(kind, username, subs, onPage, shouldCancel) {
     let after = null, pages = 0, count = 0;
-    const MAX_PAGES = 40; // Reddit's search index caps out around this many pages anyway
+    const MAX_PAGES = 40;
     do {
       if (shouldCancel()) return { count, cancelled: true };
       let page;
@@ -254,6 +343,7 @@
     }, shouldCancel);
     return { subs, totalPosts, totalComments: commentsResult.count, cancelled: commentsResult.cancelled };
   }
+  */
 
   /* ── renderers ── */
   function upArrow() {
@@ -335,11 +425,14 @@
     }
     return entries.map((e) => `
       <div class="rpu-insight-row">
-        <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
-        <div class="rpu-insight-bar-track">
-          <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
+        <div class="rpu-insight-row-main">
+          <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
+          <div class="rpu-insight-bar-track">
+            <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
+          </div>
+          <span class="rpu-insight-count">${e.total}</span>
         </div>
-        <span class="rpu-insight-count">${e.total}${e.posts && e.comments ? ` <span class="rpu-insight-split">(${e.posts} posts · ${e.comments} comments)</span>` : ""}</span>
+        <div class="rpu-insight-split">${e.posts} posts · ${e.comments} comments</div>
       </div>`).join("");
   }
 
@@ -425,8 +518,14 @@
           <div class="rpu-spinner"></div><span>Fetching posts…</span>
         </div>
       </div>
-      <div class="rpu-load-more-wrap" id="rpu-load-more-wrap" style="display:none;">
-        <button class="rpu-load-more-btn" id="rpu-load-more">Load more</button>
+      <div class="rpu-pagination" id="rpu-pagination" style="display:none;">
+        <button class="rpu-page-btn" id="rpu-prev-page" title="Previous page">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="rpu-page-info" id="rpu-page-info">Page 1 of 1</span>
+        <button class="rpu-page-btn" id="rpu-next-page" title="Next page">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>`;
     return panel;
   }
@@ -482,12 +581,13 @@
 
     let panelEl = null;
     let panelOpen = false;
+    const PAGE_SIZE = 25;
     const state = {
       activeTab: "posts",
       sort: "new",
       time: "all",
-      posts: { items: [], after: null, loaded: false },
-      comments: { items: [], after: null, loaded: false },
+      posts: { items: [], loaded: false, loading: false, page: 0 },
+      comments: { items: [], loaded: false, loading: false, page: 0 },
       insights: { loaded: false, data: null },
     };
 
@@ -507,9 +607,40 @@
       if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
     }
 
+    function itemMatches(tab, item, q) {
+      if (tab === "posts") {
+        return (item.title || "").toLowerCase().includes(q) || (item.selftext || "").toLowerCase().includes(q);
+      }
+      return (item.body || "").toLowerCase().includes(q) || (item.link_title || "").toLowerCase().includes(q);
+    }
+
+    // Arctic Shift only orders comments by time, so "Hot"/"Top" have nothing server-side
+    // to request — instead just re-sort the already-fetched full list by score. "New" and
+    // "Relevance" keep the API's chronological order (there's no real relevance signal
+    // without a search query to be relevant to).
+    function sortedItems(tab) {
+      const items = state[tab].items;
+      if (tab === "comments" && (state.sort === "hot" || state.sort === "top")) {
+        return [...items].sort((a, b) => (b.score || 0) - (a.score || 0));
+      }
+      return items;
+    }
+
+    function updatePagination(tab, totalPages) {
+      const wrap = getEl("rpu-pagination");
+      if (totalPages <= 1) { wrap.style.display = "none"; return; }
+      wrap.style.display = "flex";
+      getEl("rpu-page-info").textContent = `Page ${state[tab].page + 1} of ${totalPages}`;
+      getEl("rpu-prev-page").disabled = state[tab].page === 0;
+      getEl("rpu-next-page").disabled = state[tab].page >= totalPages - 1;
+    }
+
+    // Renders the current page of the active tab's already-fully-fetched items,
+    // applying the search box filter first. Safe to call on every keystroke/page
+    // change since it has no fetch or stat-tracking side effects.
     function renderItems() {
       const tab = state.activeTab;
-      const { items, after } = state[tab];
+      const items = sortedItems(tab);
       const content = getEl("rpu-content");
       if (!content) return;
       clearContent();
@@ -522,49 +653,27 @@
             <span>No ${tab} found for u/${esc(username)}</span>
             <p class="rpu-empty-sub">They may have no public ${tab}, or Reddit's index hasn't captured them.</p>
           </div>`);
-        getEl("rpu-load-more-wrap").style.display = "none";
+        getEl("rpu-pagination").style.display = "none";
         return;
       }
 
-      const html = items.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
-      content.insertAdjacentHTML("beforeend", html);
-      getEl("rpu-load-more-wrap").style.display = after ? "flex" : "none";
-
-      // Track posts surfaced
-      if (tab === "posts") trackPosts(items.length);
-    }
-
-    function itemMatches(tab, item, q) {
-      if (tab === "posts") {
-        return (item.title || "").toLowerCase().includes(q) || (item.selftext || "").toLowerCase().includes(q);
-      }
-      return (item.body || "").toLowerCase().includes(q) || (item.link_title || "").toLowerCase().includes(q);
-    }
-
-    // Re-filters the already-loaded items for the active tab without re-fetching or
-    // re-tracking stats — kept separate from renderItems() so typing doesn't re-trigger trackPosts().
-    function applySearchFilter() {
-      const tab = state.activeTab;
-      if (tab === "insights" || !state[tab].loaded) return;
-      const { items, after } = state[tab];
-      const content = getEl("rpu-content");
-      if (!content || items.length === 0) return;
       const query = (getEl("rpu-item-search").value || "").trim().toLowerCase();
-      content.querySelectorAll(".rpu-card, .rpu-empty").forEach((el) => el.remove());
-
       const filtered = query ? items.filter((item) => itemMatches(tab, item, query)) : items;
-      if (filtered.length === 0) {
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      state[tab].page = Math.min(Math.max(state[tab].page, 0), totalPages - 1);
+      const pageItems = filtered.slice(state[tab].page * PAGE_SIZE, (state[tab].page + 1) * PAGE_SIZE);
+
+      if (pageItems.length === 0) {
         content.insertAdjacentHTML("beforeend", `
           <div class="rpu-empty">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>No ${tab} matching "${esc(query)}"</span>
           </div>`);
-        getEl("rpu-load-more-wrap").style.display = after ? "flex" : "none";
-        return;
+      } else {
+        const html = pageItems.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
+        content.insertAdjacentHTML("beforeend", html);
       }
-      const html = filtered.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
-      content.insertAdjacentHTML("beforeend", html);
-      getEl("rpu-load-more-wrap").style.display = after ? "flex" : "none";
+      updatePagination(tab, totalPages);
     }
 
     async function loadTab(tab) {
@@ -573,47 +682,74 @@
         btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab);
       });
       getEl("rpu-item-search").value = "";
-      getEl("rpu-load-more-wrap").style.display = "none";
+      getEl("rpu-pagination").style.display = "none";
       if (tab === "insights") { await loadInsights(); return; }
-      if (state[tab].loaded) { renderItems(); return; }
+      if (state[tab].loaded) { state[tab].page = 0; renderItems(); return; }
+      if (state[tab].loading) return; // a fetch for this tab is already in flight
+      state[tab].loading = true;
       clearContent();
-      showLoading(tab === "comments" ? "Fetching comments… (scanning threads)" : "Fetching posts…");
+      showLoading(tab === "comments" ? "Fetching comments…" : "Fetching posts…");
       try {
-        const result = tab === "posts"
-          ? await fetchPosts(username, null, state.sort, state.time)
-          : await fetchComments(username, null, state.sort, state.time);
-        state[tab].items = result.items;
-        state[tab].after = result.after;
+        const items = await fetchAllItems(tab, username, state.sort, state.time, (count) => {
+          if (state.activeTab === tab) showLoading(`Fetching ${tab}… (${count} found)`);
+        });
+        state[tab].items = items;
         state[tab].loaded = true;
-        renderItems();
+        state[tab].page = 0;
+        if (state.activeTab === tab) renderItems();
+        if (tab === "posts") trackPosts(items.length);
       } catch (err) {
-        hideLoading();
-        getEl("rpu-content").insertAdjacentHTML("beforeend", `
-          <div class="rpu-error">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span>Failed to fetch ${tab}: ${esc(err.message)}</span>
-          </div>`);
+        if (state.activeTab === tab) {
+          hideLoading();
+          getEl("rpu-content").insertAdjacentHTML("beforeend", `
+            <div class="rpu-error">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Failed to fetch ${tab}: ${esc(err.message)}</span>
+            </div>`);
+        }
+      } finally {
+        state[tab].loading = false;
       }
     }
 
     async function loadInsights() {
       if (state.insights.loaded) { renderInsightsView(); return; }
       clearContent();
-      showLoading("Scanning subreddits… (page 1)");
-      try {
-        const data = await scanInsights(
-          username,
-          (progress) => {
-            if (state.activeTab !== "insights") return;
-            const found = progress.totalPosts + progress.totalComments;
-            showLoading(`Scanning subreddits… (${progress.phase}, page ${progress.page}, ${found} found)`);
-          },
-          () => state.activeTab !== "insights"
-        );
-        if (data.cancelled) return; // user navigated away mid-scan — don't cache partial data, re-scan next visit
-        state.insights.data = data;
+
+      // Comments are always a complete-history cache once loaded (sort is applied
+      // client-side, see sortedItems()), so it's always safe to reuse. Posts are only
+      // safe to reuse when the Posts tab's own fetch was itself the full history —
+      // i.e. the default New/All-time — otherwise it may be a server-side-filtered
+      // subset (e.g. "Top" + "This week") and Insights needs its own full fetch.
+      const canReusePosts = state.posts.loaded && state.sort === "new" && state.time === "all";
+      const canReuseComments = state.comments.loaded;
+
+      if (canReusePosts && canReuseComments) {
+        state.insights.data = tallySubreddits(state.posts.items, state.comments.items);
         state.insights.loaded = true;
-        if (state.activeTab === "insights") renderInsightsView();
+        renderInsightsView();
+        return;
+      }
+
+      showLoading("Scanning subreddits…");
+      try {
+        const postItems = canReusePosts
+          ? state.posts.items
+          : await fetchAllItems("posts", username, "new", "all", (count) => {
+              if (state.activeTab === "insights") showLoading(`Scanning subreddits… (posts, ${count} found)`);
+            });
+        if (state.activeTab !== "insights") return; // navigated away mid-fetch — don't cache, re-scan next visit
+
+        const commentItems = canReuseComments
+          ? state.comments.items
+          : await fetchAllItems("comments", username, "new", "all", (count) => {
+              if (state.activeTab === "insights") showLoading(`Scanning subreddits… (comments, ${count} found)`);
+            });
+        if (state.activeTab !== "insights") return;
+
+        state.insights.data = tallySubreddits(postItems, commentItems);
+        state.insights.loaded = true;
+        renderInsightsView();
       } catch (err) {
         if (state.activeTab !== "insights") return;
         hideLoading();
@@ -644,37 +780,17 @@
       if (list) list.innerHTML = renderInsightRows(filtered, maxTotal, q);
     }
 
-    async function loadMore() {
+    function goToPage(delta) {
       const tab = state.activeTab;
-      if (!state[tab].after) return;
-      const btn = getEl("rpu-load-more");
-      btn.disabled = true;
-      btn.textContent = "Loading…";
-      try {
-        const result = tab === "posts"
-          ? await fetchPosts(username, state[tab].after, state.sort, state.time)
-          : await fetchComments(username, state[tab].after, state.sort, state.time);
-        state[tab].items = [...state[tab].items, ...result.items];
-        state[tab].after = result.after;
-        const query = (getEl("rpu-item-search").value || "").trim().toLowerCase();
-        const matchingNew = query ? result.items.filter((item) => itemMatches(tab, item, query)) : result.items;
-        if (matchingNew.length) {
-          const staleEmpty = getEl("rpu-content").querySelector(".rpu-empty");
-          if (staleEmpty) staleEmpty.remove();
-          const newHtml = matchingNew.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
-          getEl("rpu-content").insertAdjacentHTML("beforeend", newHtml);
-        }
-        getEl("rpu-load-more-wrap").style.display = result.after ? "flex" : "none";
-        if (tab === "posts") trackPosts(result.items.length);
-      } catch (err) { console.error("[RPU]", err); }
-      btn.disabled = false;
-      btn.textContent = "Load more";
+      if (tab === "insights" || !state[tab].loaded) return;
+      state[tab].page += delta;
+      renderItems();
     }
 
     function resetTabState(tab) {
       state[tab].items = [];
-      state[tab].after = null;
       state[tab].loaded = false;
+      state[tab].page = 0;
     }
 
     function openPanel() {
@@ -710,23 +826,41 @@
           btn.classList.add("rpu-sort-active");
           // Show/hide time filter
           getEl("rpu-time-filter").style.display = newSort === "top" ? "block" : "none";
-          // Reset and re-fetch
-          resetTabState(state.activeTab);
-          loadTab(state.activeTab);
+          reapplySortOrRefetch();
         });
       });
 
       // Time filter change
       getEl("rpu-time-select").addEventListener("change", (e) => {
         state.time = e.target.value;
-        resetTabState(state.activeTab);
-        loadTab(state.activeTab);
+        reapplySortOrRefetch();
       });
 
-      // Search within loaded posts/comments
-      getEl("rpu-item-search").addEventListener("input", applySearchFilter);
+      // Comments are fully cached client-side and Arctic Shift only orders by time, so a
+      // sort/time change there just re-sorts what's already loaded — no need to re-fetch.
+      // Posts still hit Reddit's real search API, where a different sort is a different
+      // result set, so those genuinely need a fresh fetch.
+      function reapplySortOrRefetch() {
+        const tab = state.activeTab;
+        if (tab === "comments" && state[tab].loaded) {
+          state[tab].page = 0;
+          renderItems();
+          return;
+        }
+        resetTabState(tab);
+        loadTab(tab);
+      }
 
-      panelEl.addEventListener("click", (e) => { if (e.target.id === "rpu-load-more") loadMore(); });
+      // Search within loaded posts/comments
+      getEl("rpu-item-search").addEventListener("input", () => {
+        state[state.activeTab].page = 0;
+        renderItems();
+      });
+
+      // Pagination
+      getEl("rpu-prev-page").addEventListener("click", () => goToPage(-1));
+      getEl("rpu-next-page").addEventListener("click", () => goToPage(1));
+
       getEl("rpu-close").addEventListener("click", closePanel);
       loadTab("posts");
     }
