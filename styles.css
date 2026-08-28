@@ -297,25 +297,29 @@
 }
 #rpu-panel .rpu-view-link:hover { text-decoration: underline; }
 
-/* Load more */
-#rpu-panel .rpu-load-more-wrap {
-  padding: 10px 16px; border-top: 1px solid #edeff1; display: flex; justify-content: center;
+/* Pagination */
+#rpu-panel .rpu-pagination {
+  padding: 10px 16px; border-top: 1px solid #edeff1;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
 }
 @media (prefers-color-scheme: dark) {
-  #rpu-panel .rpu-load-more-wrap { border-color: #343536; }
+  #rpu-panel .rpu-pagination { border-color: #343536; }
 }
 
-#rpu-panel .rpu-load-more-btn {
-  font-size: 14px; font-weight: 700; padding: 8px 32px;
-  border-radius: 20px; border: 1px solid #edeff1;
+#rpu-panel .rpu-page-info { font-size: 12px; font-weight: 600; color: #878a8c; }
+
+#rpu-panel .rpu-page-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  border-radius: 50%; border: 1px solid #edeff1;
   background: transparent; color: #1c1c1c;
-  cursor: pointer; font-family: inherit; transition: background 0.1s, border-color 0.1s;
+  cursor: pointer; transition: background 0.1s, border-color 0.1s;
 }
-#rpu-panel .rpu-load-more-btn:hover { background: #f6f7f8; border-color: #878a8c; }
-#rpu-panel .rpu-load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#rpu-panel .rpu-page-btn:hover:not(:disabled) { background: #f6f7f8; border-color: #878a8c; }
+#rpu-panel .rpu-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 @media (prefers-color-scheme: dark) {
-  #rpu-panel .rpu-load-more-btn { border-color: #343536; color: #d7dadc; }
-  #rpu-panel .rpu-load-more-btn:hover { background: #272729; border-color: #818384; }
+  #rpu-panel .rpu-page-btn { border-color: #343536; color: #d7dadc; }
+  #rpu-panel .rpu-page-btn:hover:not(:disabled) { background: #272729; border-color: #818384; }
 }
 
 /* ── Disclaimer ── */
@@ -498,7 +502,11 @@
 #rpu-panel .rpu-insight-list { display: flex; flex-direction: column; gap: 2px; }
 
 #rpu-panel .rpu-insight-row {
-  display: flex; align-items: center; gap: 10px; padding: 6px 4px;
+  display: flex; flex-direction: column; gap: 1px; padding: 6px 4px;
+}
+
+#rpu-panel .rpu-insight-row-main {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
 }
 
 #rpu-panel .rpu-insight-sub {
@@ -526,4 +534,6 @@
 @media (prefers-color-scheme: dark) {
   #rpu-panel .rpu-insight-count { color: #d7dadc; }
 }
-#rpu-panel .rpu-insight-split { font-weight: 500; color: #878a8c; }
+#rpu-panel .rpu-insight-split {
+  font-size: 10px; font-weight: 500; color: #878a8c; text-align: right;
+}
