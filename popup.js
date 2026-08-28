@@ -11,6 +11,65 @@
   const resetBtn = document.getElementById("reset-btn");
   const refreshBtn = document.getElementById("refresh-btn");
 
+  const defaultView = document.getElementById("default-view");
+  const whatsNewView = document.getElementById("whats-new-view");
+  const wnBadge = document.getElementById("wn-badge");
+  const wnTitle = document.getElementById("wn-title");
+  const wnItems = document.getElementById("wn-items");
+  const wnGotIt = document.getElementById("wn-got-it");
+
+  /* ── What's new ── */
+  chrome.storage.local.get(["showWhatsNew"], (res) => {
+    if (!res.showWhatsNew) return;
+    const version = chrome.runtime.getManifest().version;
+    fetch(chrome.runtime.getURL("whats-new.json"))
+      .then((r) => r.json())
+      .then((data) => {
+        const entry = data[version];
+        if (entry) {
+          renderWhatsNew(entry, version);
+        } else {
+          chrome.storage.local.remove("showWhatsNew");
+        }
+      })
+      .catch(() => chrome.storage.local.remove("showWhatsNew"));
+  });
+
+  function renderWhatsNew(entry, version) {
+    wnBadge.textContent = "UPDATED TO V" + version;
+    wnTitle.textContent = entry.title || "What's new";
+    wnItems.innerHTML = "";
+    (entry.items || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "wn-item";
+
+      const icon = document.createElement("div");
+      icon.className = "wn-item-icon";
+      icon.textContent = item.icon || "✨";
+
+      const text = document.createElement("div");
+      text.className = "wn-item-text";
+      const title = document.createElement("strong");
+      title.textContent = item.title || "";
+      const desc = document.createElement("span");
+      desc.textContent = item.desc || "";
+      text.appendChild(title);
+      text.appendChild(desc);
+
+      row.appendChild(icon);
+      row.appendChild(text);
+      wnItems.appendChild(row);
+    });
+    defaultView.style.display = "none";
+    whatsNewView.style.display = "";
+  }
+
+  wnGotIt.addEventListener("click", () => {
+    chrome.storage.local.remove("showWhatsNew");
+    whatsNewView.style.display = "none";
+    defaultView.style.display = "";
+  });
+
   /* ── Load state ── */
   chrome.storage.local.get(["profilesRevealed", "postsSurfaced", "enabled"], (res) => {
     statProfiles.textContent = res.profilesRevealed || 0;

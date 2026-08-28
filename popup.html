@@ -7,6 +7,22 @@
 </head>
 <body>
 <div class="popup">
+  <div class="whats-new-view" id="whats-new-view" style="display:none;">
+    <div class="wn-icon-wrap">
+      <div class="wn-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff4500" stroke-width="2.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+    </div>
+    <div class="wn-badge" id="wn-badge">UPDATED TO V3.2</div>
+    <h2 class="wn-title" id="wn-title">What's new</h2>
+    <div class="wn-items" id="wn-items"></div>
+    <button class="wn-cta" id="wn-got-it">Got it &rarr;</button>
+  </div>
+
+  <div class="default-view" id="default-view">
   <div class="header">
     <div class="logo">
       <div class="logo-icon">
@@ -61,6 +77,7 @@
       profile-unhider.netlify.app
     </a>
     <span class="version">v3.0</span>
+  </div>
   </div>
 </div>
 <script src="popup.js"></script>
