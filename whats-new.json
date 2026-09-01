@@ -16,6 +16,11 @@
         "icon": "🔓",
         "title": "One-click unhide",
         "desc": "Click the badge to jump straight to unhiding that profile"
+      },
+      {
+        "icon": "💬",
+        "title": "Deeper comment history",
+        "desc": "Pull a profile's full comment history, not just what Reddit's own index happens to catch"
       }
     ]
   }
