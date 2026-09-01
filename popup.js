@@ -18,10 +18,20 @@
   const wnItems = document.getElementById("wn-items");
   const wnGotIt = document.getElementById("wn-got-it");
 
-  /* ── What's new ── */
-  chrome.storage.local.get(["showWhatsNew"], (res) => {
-    if (!res.showWhatsNew) return;
+  document.getElementById("version-label").textContent = "v" + chrome.runtime.getManifest().version;
+
+  /* ── What's new ──
+     Detected by comparing the current version against the last one this popup
+     recorded, checked fresh on every open — rather than trusting a flag set by
+     background.js's onInstalled(reason:"update"), which isn't a reliable signal
+     in every dev/reload setup (e.g. more than one copy of the unpacked extension
+     loaded at once). A fresh install has no lastSeenVersion yet; background.js
+     seeds it on install so this never fires there, only on later version bumps. */
+  chrome.storage.local.get(["lastSeenVersion"], (res) => {
     const version = chrome.runtime.getManifest().version;
+    const lastSeen = res.lastSeenVersion;
+    if (lastSeen === undefined) { chrome.storage.local.set({ lastSeenVersion: version }); return; }
+    if (lastSeen === version) return;
     fetch(chrome.runtime.getURL("whats-new.json"))
       .then((r) => r.json())
       .then((data) => {
@@ -29,10 +39,10 @@
         if (entry) {
           renderWhatsNew(entry, version);
         } else {
-          chrome.storage.local.remove("showWhatsNew");
+          chrome.storage.local.set({ lastSeenVersion: version });
         }
       })
-      .catch(() => chrome.storage.local.remove("showWhatsNew"));
+      .catch(() => {});
   });
 
   function renderWhatsNew(entry, version) {
@@ -65,7 +75,7 @@
   }
 
   wnGotIt.addEventListener("click", () => {
-    chrome.storage.local.remove("showWhatsNew");
+    chrome.storage.local.set({ lastSeenVersion: chrome.runtime.getManifest().version });
     whatsNewView.style.display = "none";
     defaultView.style.display = "";
   });
