@@ -3,6 +3,12 @@
   "name": "Profile Unhider",
   "version": "3.3.0",
   "description": "Surface publicly indexed posts and comments for hidden Reddit profiles. Data sourced from Reddit's public search index.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "profileunhider@srijanreddy",
+      "strict_min_version": "109.0"
+    }
+  },
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["https://www.reddit.com/*"],
   "icons": {
@@ -19,7 +25,8 @@
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {
