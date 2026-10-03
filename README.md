@@ -1,30 +1,26 @@
-# Reddit Profile Unhider
+# Profile Unhider
 
-Chrome extension that reveals post and comment history for hidden Reddit profiles.
+Chrome extension that surfaces publicly indexed posts and comments
+for Reddit users who have hidden their profiles.
 
-<a href="https://www.producthunt.com/products/profile-unhider?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-profile-unhider" target="_blank" rel="noopener noreferrer"><img alt="Profile Unhider  - Unhide Reddit activity using Reddit's own public index | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1224663&amp;theme=light&amp;t=1786942922714"></a>
+## What's what
 
-## How it works
-1. Navigate to any Reddit user profile (reddit.com/user/username)
-2. If the profile is hidden, a **"Reveal activity"** button appears below the hidden message
-3. Click it to load the user's posts and comments via Reddit's search index
-4. Switch between Posts / Comments tabs, and use **Load more** to paginate
+- `extension/` — the Chrome extension. `manifest.json` lives here.
+  This is the folder you load unpacked and zip for the Web Store.
+- `website/` — the landing page + privacy policy (static site).
 
-## Install (Developer Mode)
-1. Download and unzip this folder
-2. Open Chrome → go to `chrome://extensions`
-3. Enable **Developer mode** (top right toggle)
-4. Click **Load unpacked**
-5. Select the `reddit-unhider` folder
-6. Done — visit any hidden Reddit profile to test
+## Extension
 
-## Notes
-- Data comes from Reddit's public search index (`search.json` with `author:` filter)
-- Very recent posts may not appear yet (Reddit's index has a short delay)
-- Works on new Reddit only (`www.reddit.com`)
-- No login, no OAuth, no data stored — purely read-only
+Load unpacked: `chrome://extensions` → Developer mode → Load unpacked → select `extension/`.
 
-## Version 2 (planned)
-- Sort bar: New · Hot · Top · Relevance
-- Time filter for Top
-- Old Reddit support
+Ship to the Web Store — zip ONLY the extension folder:
+
+    cd extension && zip -r ../profile-unhider.zip . -x '*.DS_Store'
+
+## Website
+
+Static site. Deploy from the `website/` directory — set your
+Vercel/Netlify project root to `website/`.
+
+When cutting a release, update the version history in both
+`extension/whats-new.json` and the site's What's new section.
