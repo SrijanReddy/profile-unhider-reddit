@@ -1,6 +1,6 @@
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
-    chrome.tabs.create({ url: "https://profile-unhider.netlify.app/welcome" });
+    chrome.tabs.create({ url: "https://profile-unhider.vercel.app/welcome" });
     // Seed lastSeenVersion so popup.js's own version check (see popup.js) never
     // shows the what's-new screen on a brand-new install — only on later updates.
     chrome.storage.local.set({ lastSeenVersion: chrome.runtime.getManifest().version });
