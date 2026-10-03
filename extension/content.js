@@ -549,7 +549,7 @@
           </div>
           <div class="rpu-disclaimer-text">
             <span class="rpu-disclaimer-title">Profile Unhider</span>
-            <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from Reddit's public search index. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.netlify.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
+            <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from Reddit's public search index. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
           </div>
         </div>`;
       profileMain.appendChild(disclaimer);
