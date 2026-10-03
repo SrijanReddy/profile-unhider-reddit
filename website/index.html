@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile Unhider — See the Reddit activity a profile hides</title>
+  <meta name="description" content="Profile Unhider is a free Chrome extension that surfaces publicly indexed posts and comments for Reddit users who have hidden their profiles. No login, no tracking.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23ff6942'/%3E%3Ccircle cx='16' cy='13' r='5' fill='none' stroke='%23171613' stroke-width='2.5'/%3E%3Cpath d='M7 23c2.5-4 5.5-6 9-6s6.5 2 9 6' fill='none' stroke='%23171613' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="./" aria-label="Profile Unhider home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#171613" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="3.5"/><path d="M5 19c1.8-3 4.2-4.5 7-4.5s5.2 1.5 7 4.5"/></svg>
+        </span>
+        Profile Unhider
+      </a>
+      <div class="nav-links">
+        <a href="#how-it-works">How it works</a>
+        <a href="#whats-new">What's new</a>
+        <a href="#faq">FAQ</a>
+        <a href="privacy/">Privacy</a>
+      </div>
+      <a class="btn" href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Add to Chrome</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="kicker">Chrome extension · Free</p>
+        <h1>See the Reddit activity a profile hides.</h1>
+        <p class="lede">Profile Unhider brings publicly indexed posts and comments back into view — right on the Reddit profile you're already looking at. No login, no setup, no tracking.</p>
+        <div class="hero-ctas">
+          <a class="btn" href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Add to Chrome</a>
+          <a class="btn btn-ghost" href="#how-it-works">See how it works</a>
+        </div>
+      </div>
+
+      <div class="demo" id="demo" aria-label="Animated demo of the extension revealing a hidden profile">
+        <div class="demo-bar" aria-hidden="true">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="demo-url">reddit.com/user/hiddenperson</span>
+        </div>
+        <div class="demo-body">
+          <div class="demo-state demo-hidden">
+            <div class="demo-profile">
+              <span class="avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#171613" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="3.5"/><path d="M5 19c1.8-3 4.2-4.5 7-4.5s5.2 1.5 7 4.5"/></svg>
+              </span>
+              <div>
+                <div class="demo-name">u/hiddenperson</div>
+                <div class="demo-sub">This user has hidden their profile</div>
+              </div>
+            </div>
+            <div class="censor-row">
+              <div class="censor-bar"></div>
+              <span class="demo-reveal-btn">Reveal activity</span>
+            </div>
+            <p class="demo-hidden-note">This profile is hidden — click Reveal to surface its public activity.</p>
+          </div>
+          <div class="demo-state demo-revealed">
+            <div class="demo-profile">
+              <span class="avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#171613" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="3.5"/><path d="M5 19c1.8-3 4.2-4.5 7-4.5s5.2 1.5 7 4.5"/></svg>
+              </span>
+              <div>
+                <div class="demo-name">u/hiddenperson</div>
+                <div class="demo-sub">5 items found</div>
+              </div>
+              <span class="found-badge">Found</span>
+            </div>
+            <div class="tabs" aria-hidden="true">
+              <span class="tab active">Overview</span>
+              <span class="tab">Posts</span>
+              <span class="tab">Comments</span>
+            </div>
+            <div class="post">
+              <span class="post-score">794</span>
+              <div>
+                <div class="post-meta"><b>r/crappymusic</b> · 7mo ago</div>
+                <div class="post-title">I finally found one in the wild</div>
+              </div>
+            </div>
+            <div class="post">
+              <span class="post-score">132</span>
+              <div>
+                <div class="post-meta"><b>r/mexicanfood</b> · 11mo ago</div>
+                <div class="post-title">5x10 deal at my local mex restaurant</div>
+              </div>
+            </div>
+            <div class="post">
+              <span class="post-score">48</span>
+              <div>
+                <div class="post-meta"><b>r/AskReddit</b> · 1y ago</div>
+                <div class="post-title">What’s a small thing that made your week?</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="demo-foot">Public results from Reddit search · displayed locally in your browser</div>
+      </div>
+    </div>
+  </header>
+
+  <section class="section" id="how-it-works">
+    <div class="wrap">
+      <p class="section-label">How it works</p>
+      <h2>Three steps, zero setup.</h2>
+      <p class="section-intro">Reddit indexes posts and comments made in public subreddits even when a user hides their profile. The extension just asks Reddit's own public search for them.</p>
+      <div class="steps">
+        <div class="step">
+          <p class="step-num">01</p>
+          <h3>Install the extension</h3>
+          <p>Add Profile Unhider from the Chrome Web Store. No sign-up, and it asks for nothing beyond reddit.com.</p>
+        </div>
+        <div class="step">
+          <p class="step-num">02</p>
+          <h3>Visit a hidden profile</h3>
+          <p>Open any Reddit profile. If it's hidden, a Reveal activity button appears on its own.</p>
+        </div>
+        <div class="step">
+          <p class="step-num">03</p>
+          <h3>See the activity</h3>
+          <p>Click it to browse publicly indexed posts and comments — paginate, filter, and click through to any thread.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="whats-new">
+    <div class="wrap">
+      <p class="section-label">What's new</p>
+      <h2>Latest updates.</h2>
+      <p class="section-intro">Shipped regularly. This page always reflects the current Web Store version.</p>
+
+      <div class="version">
+        <div class="version-head">
+          <span class="version-tag">v3.3</span>
+          <span class="version-date">current</span>
+        </div>
+        <ul>
+          <li>Fixed the comments section</li>
+          <li>Added insights</li>
+          <li>New what's-new section</li>
+        </ul>
+      </div>
+
+      <div class="version">
+        <div class="version-head"><span class="version-tag">v3.2</span></div>
+        <ul>
+          <li>Hover card badges — see at a glance whether a profile is hidden or public when you click a username anywhere on Reddit</li>
+          <li>Click the badge to open and unhide that profile</li>
+        </ul>
+      </div>
+
+      <div class="version">
+        <div class="version-head"><span class="version-tag">v3.1</span></div>
+        <ul>
+          <li>Refresh button on the popup for slow polling</li>
+        </ul>
+      </div>
+
+      <div class="version">
+        <div class="version-head"><span class="version-tag">v3.0</span></div>
+        <ul>
+          <li>Sort bar — sort posts and comments by New, Hot, Top, or Relevance</li>
+          <li>Time filter — when sorting by Top, filter by Today, This week, This month, This year, or All time</li>
+          <li>Popup revamp with a cleaner layout</li>
+          <li>Reset stats from the popup</li>
+          <li>Onboarding welcome page for new users</li>
+          <li>Thumbnail fix for encoded image URLs</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap">
+      <p class="section-label">FAQ</p>
+      <h2>Common questions.</h2>
+      <p class="section-intro">Straight answers, no fine print.</p>
+
+      <details class="faq-item" open>
+        <summary>Does this show private content?</summary>
+        <div class="answer">No. It only surfaces what Reddit has already indexed in its public search. If Reddit's own search can find it, the extension can show it — private, deleted, or non-public content never appears.</div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Does my data pass through your servers?</summary>
+        <div class="answer">There are no servers. The extension makes direct requests from your browser to Reddit's API and displays the results in-page. Nothing is logged, stored, or sent anywhere.</div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Why does a profile show little or nothing?</summary>
+        <div class="answer">Only content Reddit's search index has captured can be shown. Some users have very little indexed, and very recent activity may not appear until Reddit indexes it.</div>
+      </details>
+
+      <details class="faq-item">
+        <summary>When does the extension activate?</summary>
+        <div class="answer">Only on profiles set to hidden — on normal public profiles it stays completely invisible and does nothing. It currently supports new Reddit (reddit.com).</div>
+      </details>
+
+      <details class="faq-item">
+        <summary>Is this against Reddit's rules?</summary>
+        <div class="answer">The extension uses Reddit's public search API in a read-only, non-commercial way. It doesn't scrape, store, or redistribute data — everything shown is already publicly searchable on Reddit itself.</div>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-inner">
+      <a href="privacy/">Privacy</a>
+      <a href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Chrome Web Store</a>
+      <span class="foot-note">© 2026 Profile Unhider · Not affiliated with Reddit.</span>
+    </div>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
