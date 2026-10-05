@@ -187,6 +187,7 @@
   border-top-color: #ff4500; border-radius: 50%;
   animation: rpu-spin 0.7s linear infinite; flex-shrink: 0;
 }
+#rpu-panel .rpu-loading-sub { display: block; font-size: 12px; }
 @keyframes rpu-spin { to { transform: rotate(360deg); } }
 
 /* Empty / Error */

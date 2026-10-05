@@ -595,14 +595,14 @@
       time: "all",
       posts: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
       comments: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
-      insights: { loaded: false, data: null },
+      insights: { loaded: false, loading: false, data: null },
     };
 
     const getEl = (id) => document.getElementById(id);
 
-    function showLoading(msg) {
+    function showLoading(msg, sub) {
       const el = getEl("rpu-loading");
-      if (el) { el.style.display = "flex"; el.innerHTML = `<div class="rpu-spinner"></div><span>${esc(msg)}</span>`; }
+      if (el) { el.style.display = "flex"; el.innerHTML = `<div class="rpu-spinner"></div><span>${esc(msg)}${sub ? `<span class="rpu-loading-sub">${esc(sub)}</span>` : ""}</span>`; }
     }
     function hideLoading() {
       const el = getEl("rpu-loading");
@@ -740,7 +740,14 @@
     }
 
     async function loadInsights() {
+      // Honest waiting room: a full-history scan takes a while on active profiles,
+      // so say so and invite browsing other tabs — the scan keeps running behind them.
+      const showScanWaiting = (detail) => showLoading(
+        detail ? `Scanning subreddits… (${detail})` : "Scanning subreddits…",
+        "Takes a while on active profiles — browse Posts & Comments meanwhile, it'll be ready when you're back."
+      );
       if (state.insights.loaded) { renderInsightsView(); return; }
+      if (state.insights.loading) { showScanWaiting(); return; } // scan already running — just re-show the waiting room
       clearContent();
 
       // Comments are always a complete-history cache once fully loaded (sort is applied
@@ -759,25 +766,26 @@
       }
 
       showLoading("Scanning subreddits…");
+      state.insights.loading = true;
+      showScanWaiting();
       try {
         // Posts and comments are independent — fetch them concurrently instead of back-to-back.
         const [postItems, commentItems] = await Promise.all([
           canReusePosts
             ? state.posts.items
             : fetchAllItems("posts", username, "new", "all", (count) => {
-                if (state.activeTab === "insights") showLoading(`Scanning subreddits… (posts, ${count} found)`);
+                if (state.activeTab === "insights") showScanWaiting(`posts, ${count} found`);
               }),
           canReuseComments
             ? state.comments.items
             : fetchAllItems("comments", username, "new", "all", (count) => {
-                if (state.activeTab === "insights") showLoading(`Scanning subreddits… (comments, ${count} found)`);
+                if (state.activeTab === "insights") showScanWaiting(`comments, ${count} found`);
               }),
         ]);
-        if (state.activeTab !== "insights") return; // navigated away mid-fetch — don't cache, re-scan next visit
-
         state.insights.data = tallySubreddits(postItems, commentItems);
         state.insights.loaded = true;
-        renderInsightsView();
+        if (state.activeTab === "insights") renderInsightsView();
+        // else: browsed away mid-scan — the result is cached and renders on return
       } catch (err) {
         if (state.activeTab !== "insights") return;
         hideLoading();
@@ -786,6 +794,8 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>Failed to scan subreddits: ${esc(err.message)}</span>
           </div>`);
+      } finally {
+        state.insights.loading = false;
       }
     }
 
