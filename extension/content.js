@@ -189,7 +189,10 @@
     // Pagination is time-cursor based: `after` here holds the created_utc (unix seconds)
     // of the last item from the previous page, passed back as `before` since we always
     // walk newest -> oldest. No `sort`/`time` mapping — the API only orders by time.
-    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&md2html=true&meta-app=profile-unhider";
+    // NOTE: no md2html — renderComment() uses the raw `body` field, so asking the
+    // server to render HTML was pure overhead. `fields` keeps the payload to what
+    // the cards actually display.
+    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&fields=id,body,subreddit,subreddit_name_prefixed,created_utc,score,permalink,link_title&meta-app=profile-unhider";
     if (after) url += "&before=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error("Arctic Shift API returned " + res.status);
@@ -239,7 +242,7 @@
   // Reddit's listing/search endpoints cap `limit` at 100 and paginate via an opaque
   // `after` cursor — there's no single request that returns "everything", so this
   // walks every page (100 at a time) up front and hands back the full list.
-  async function fetchAllItems(tab, username, sort, time, onProgress) {
+  async function fetchAllItems(tab, username, sort, time, onProgress, onFirstPage, onLaterPage) {
     let after = null, pages = 0, all = [];
     const MAX_PAGES = 40; // Reddit's search index caps out around this many pages anyway
     do {
@@ -250,6 +253,10 @@
       after = result.after;
       pages++;
       onProgress(all.length);
+      // Progressive rendering: let the caller paint page 1 immediately instead of
+      // waiting for the full history; later pages stream in behind it.
+      if (pages === 1 && onFirstPage) onFirstPage(all);
+      else if (pages > 1 && onLaterPage) onLaterPage(all);
     } while (after && pages < MAX_PAGES);
     return all;
   }
@@ -586,8 +593,8 @@
       activeTab: "posts",
       sort: "new",
       time: "all",
-      posts: { items: [], loaded: false, loading: false, page: 0 },
-      comments: { items: [], loaded: false, loading: false, page: 0 },
+      posts: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
+      comments: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
       insights: { loaded: false, data: null },
     };
 
@@ -687,18 +694,38 @@
       if (state[tab].loaded) { state[tab].page = 0; renderItems(); return; }
       if (state[tab].loading) return; // a fetch for this tab is already in flight
       state[tab].loading = true;
+      state[tab].fullyLoaded = false;
+      const fetchId = ++state[tab].fetchId; // stale callbacks from a superseded fetch no-op
+      const isCurrent = () => state[tab].fetchId === fetchId && state.activeTab === tab;
       clearContent();
       showLoading(tab === "comments" ? "Fetching comments…" : "Fetching posts…");
       try {
         const items = await fetchAllItems(tab, username, state.sort, state.time, (count) => {
-          if (state.activeTab === tab) showLoading(`Fetching ${tab}… (${count} found)`);
+          if (isCurrent() && !state[tab].loaded) showLoading(`Fetching ${tab}… (${count} found)`);
+        }, (firstPage) => {
+          // First page is in — paint it now instead of waiting for the full history.
+          if (!isCurrent()) return;
+          state[tab].items = firstPage;
+          state[tab].loaded = true;
+          state[tab].page = 0;
+          renderItems();
+        }, (grown) => {
+          // Later pages stream in behind the rendered content.
+          if (!isCurrent() || !state[tab].loaded) return;
+          state[tab].items = grown;
+          renderItems();
         });
+        if (state[tab].fetchId !== fetchId) return; // superseded mid-fetch; a newer fetch owns this tab now
         state[tab].items = items;
-        state[tab].loaded = true;
-        state[tab].page = 0;
+        state[tab].fullyLoaded = true;
         if (state.activeTab === tab) renderItems();
         if (tab === "posts") trackPosts(items.length);
       } catch (err) {
+        if (state[tab].fetchId !== fetchId) return;
+        // If later pages failed after the first already rendered, keep what's on
+        // screen — the background fetch just stops. fullyLoaded stays false so
+        // Insights won't tally a partial history.
+        if (state[tab].loaded) return;
         if (state.activeTab === tab) {
           hideLoading();
           getEl("rpu-content").insertAdjacentHTML("beforeend", `
@@ -708,7 +735,7 @@
             </div>`);
         }
       } finally {
-        state[tab].loading = false;
+        if (state[tab].fetchId === fetchId) state[tab].loading = false;
       }
     }
 
@@ -716,13 +743,13 @@
       if (state.insights.loaded) { renderInsightsView(); return; }
       clearContent();
 
-      // Comments are always a complete-history cache once loaded (sort is applied
+      // Comments are always a complete-history cache once fully loaded (sort is applied
       // client-side, see sortedItems()), so it's always safe to reuse. Posts are only
       // safe to reuse when the Posts tab's own fetch was itself the full history —
       // i.e. the default New/All-time — otherwise it may be a server-side-filtered
       // subset (e.g. "Top" + "This week") and Insights needs its own full fetch.
-      const canReusePosts = state.posts.loaded && state.sort === "new" && state.time === "all";
-      const canReuseComments = state.comments.loaded;
+      const canReusePosts = state.posts.fullyLoaded && state.sort === "new" && state.time === "all";
+      const canReuseComments = state.comments.fullyLoaded;
 
       if (canReusePosts && canReuseComments) {
         state.insights.data = tallySubreddits(state.posts.items, state.comments.items);
@@ -733,19 +760,20 @@
 
       showLoading("Scanning subreddits…");
       try {
-        const postItems = canReusePosts
-          ? state.posts.items
-          : await fetchAllItems("posts", username, "new", "all", (count) => {
-              if (state.activeTab === "insights") showLoading(`Scanning subreddits… (posts, ${count} found)`);
-            });
+        // Posts and comments are independent — fetch them concurrently instead of back-to-back.
+        const [postItems, commentItems] = await Promise.all([
+          canReusePosts
+            ? state.posts.items
+            : fetchAllItems("posts", username, "new", "all", (count) => {
+                if (state.activeTab === "insights") showLoading(`Scanning subreddits… (posts, ${count} found)`);
+              }),
+          canReuseComments
+            ? state.comments.items
+            : fetchAllItems("comments", username, "new", "all", (count) => {
+                if (state.activeTab === "insights") showLoading(`Scanning subreddits… (comments, ${count} found)`);
+              }),
+        ]);
         if (state.activeTab !== "insights") return; // navigated away mid-fetch — don't cache, re-scan next visit
-
-        const commentItems = canReuseComments
-          ? state.comments.items
-          : await fetchAllItems("comments", username, "new", "all", (count) => {
-              if (state.activeTab === "insights") showLoading(`Scanning subreddits… (comments, ${count} found)`);
-            });
-        if (state.activeTab !== "insights") return;
 
         state.insights.data = tallySubreddits(postItems, commentItems);
         state.insights.loaded = true;
@@ -790,6 +818,7 @@
     function resetTabState(tab) {
       state[tab].items = [];
       state[tab].loaded = false;
+      state[tab].fullyLoaded = false;
       state[tab].page = 0;
     }
 
