@@ -190,9 +190,9 @@
     // of the last item from the previous page, passed back as `before` since we always
     // walk newest -> oldest. No `sort`/`time` mapping — the API only orders by time.
     // NOTE: no md2html — renderComment() uses the raw `body` field, so asking the
-    // server to render HTML was pure overhead. `fields` keeps the payload to what
-    // the cards actually display.
-    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&fields=id,body,subreddit,subreddit_name_prefixed,created_utc,score,permalink,link_title&meta-app=profile-unhider";
+    // server to render HTML was pure overhead. (Also skipped the `fields` selector:
+    // its allowlist rejects permalink/subreddit_name_prefixed, which the cards need.)
+    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider";
     if (after) url += "&before=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error("Arctic Shift API returned " + res.status);
