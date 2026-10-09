@@ -23,5 +23,20 @@
         "desc": "Pull a profile's full comment history, not just what Reddit's own index happens to catch"
       }
     ]
+  },
+  "3.3.2": {
+    "title": "What's new",
+    "items": [
+      {
+        "icon": "⚡",
+        "title": "Faster loading",
+        "desc": "Posts and comments appear instantly while the rest streams in behind them"
+      },
+      {
+        "icon": "🧠",
+        "title": "Smarter Insights",
+        "desc": "Reuses your already-loaded data, and the scan keeps running in the background while you browse other tabs"
+      }
+    ]
   }
 }
