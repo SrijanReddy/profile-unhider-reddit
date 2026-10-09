@@ -181,6 +181,14 @@
     } catch(e) { return null; }
   }
 
+  // Arctic Shift being slow/overloaded/down all look the same to the user — show one
+  // friendly message instead of a raw status code.
+  function busyError() {
+    const e = new Error("A lot of traffic right now, please try again in a bit.");
+    e.friendly = true;
+    return e;
+  }
+//fetch-comments
   async function fetchComments(username, after, sort, time, limit) {
     limit = limit || 25;
     // Arctic Shift is a third-party archival index (not a live Reddit endpoint), so it
@@ -194,8 +202,13 @@
     // its allowlist rejects permalink/subreddit_name_prefixed, which the cards need.)
     let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider";
     if (after) url += "&before=" + encodeURIComponent(after);
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error("Arctic Shift API returned " + res.status);
+    let res;
+    try {
+      res = await fetch(url, { headers: { Accept: "application/json" } });
+    } catch (e) {
+      throw busyError();
+    }
+    if (!res.ok) throw busyError();
     const json = await res.json();
     const items = json.data || [];
     const last = items[items.length - 1];
@@ -464,6 +477,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" class="rpu-insight-search" id="rpu-insight-search" placeholder="Search subreddit…" autocomplete="off" />
       </div>` : ""}
+      <p class="rpu-insight-note">Comment counts are based on the latest 100 comments.</p>
       ${data.cancelled ? `<p class="rpu-insight-note">Scan stopped early (rate limited) — showing partial results.</p>` : ""}
       <div class="rpu-insight-list" id="rpu-insight-list">${renderInsightRows(entries, maxTotal, "")}</div>`;
   }
@@ -589,6 +603,7 @@
     let panelEl = null;
     let panelOpen = false;
     const PAGE_SIZE = 25;
+    const INSIGHT_COMMENT_LIMIT = 100;
     const state = {
       activeTab: "posts",
       sort: "new",
@@ -731,7 +746,7 @@
           getEl("rpu-content").insertAdjacentHTML("beforeend", `
             <div class="rpu-error">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span>Failed to fetch ${tab}: ${esc(err.message)}</span>
+              <span>${err.friendly ? esc(err.message) : `Failed to fetch ${tab}: ${esc(err.message)}`}</span>
             </div>`);
         }
       } finally {
@@ -750,22 +765,21 @@
       if (state.insights.loading) { showScanWaiting(); return; } // scan already running — just re-show the waiting room
       clearContent();
 
-      // Comments are always a complete-history cache once fully loaded (sort is applied
-      // client-side, see sortedItems()), so it's always safe to reuse. Posts are only
-      // safe to reuse when the Posts tab's own fetch was itself the full history —
-      // i.e. the default New/All-time — otherwise it may be a server-side-filtered
-      // subset (e.g. "Top" + "This week") and Insights needs its own full fetch.
+      // Insights only looks at the user's latest 100 comments (one request) — it no
+      // longer walks their full comment history. Reuse the Comments tab's cache when it
+      // already holds at least 100 (it's newest-first); otherwise fetch just that page.
+      // Posts are only safe to reuse when the Posts tab's own fetch was itself the full
+      // history — i.e. the default New/All-time — otherwise Insights needs its own fetch.
       const canReusePosts = state.posts.fullyLoaded && state.sort === "new" && state.time === "all";
-      const canReuseComments = state.comments.fullyLoaded;
+      const canReuseComments = state.comments.items.length >= INSIGHT_COMMENT_LIMIT;
 
       if (canReusePosts && canReuseComments) {
-        state.insights.data = tallySubreddits(state.posts.items, state.comments.items);
+        state.insights.data = tallySubreddits(state.posts.items, state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT));
         state.insights.loaded = true;
         renderInsightsView();
         return;
       }
 
-      showLoading("Scanning subreddits…");
       state.insights.loading = true;
       showScanWaiting();
       try {
@@ -777,10 +791,8 @@
                 if (state.activeTab === "insights") showScanWaiting(`posts, ${count} found`);
               }),
           canReuseComments
-            ? state.comments.items
-            : fetchAllItems("comments", username, "new", "all", (count) => {
-                if (state.activeTab === "insights") showScanWaiting(`comments, ${count} found`);
-              }),
+            ? state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT)
+            : fetchComments(username, null, "new", "all", INSIGHT_COMMENT_LIMIT).then((r) => r.items),
         ]);
         state.insights.data = tallySubreddits(postItems, commentItems);
         state.insights.loaded = true;
@@ -792,7 +804,7 @@
         getEl("rpu-content").insertAdjacentHTML("beforeend", `
           <div class="rpu-error">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span>Failed to scan subreddits: ${esc(err.message)}</span>
+            <span>${err.friendly ? esc(err.message) : `Failed to scan subreddits: ${esc(err.message)}`}</span>
           </div>`);
       } finally {
         state.insights.loading = false;
