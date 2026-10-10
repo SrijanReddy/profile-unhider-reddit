@@ -181,7 +181,7 @@
     } catch(e) { return null; }
   }
 
-  // Arctic Shift being slow/overloaded/down all look the same to the user — show one
+  // PullPush being slow/overloaded/down all look the same to the user — show one
   // friendly message instead of a raw status code.
   function busyError() {
     const e = new Error("A lot of traffic right now, please try again in a bit.");
@@ -190,27 +190,40 @@
   }
 //fetch-comments
   async function fetchComments(username, after, sort, time, limit) {
-    limit = limit || 25;
-    // Arctic Shift is a third-party archival index (not a live Reddit endpoint), so it
-    // isn't subject to the account's own "hide profile" listing restriction the way
-    // /user/<name>/comments.json is — it just returns whatever it has indexed.
-    // Pagination is time-cursor based: `after` here holds the created_utc (unix seconds)
+    limit = Math.min(limit || 25, 100); // both archives cap page size at 100
+    // Third-party archival indexes (not live Reddit endpoints), so they aren't subject
+    // to the account's own "hide profile" listing restriction. PullPush is tried first;
+    // if it errors or rate-limits (HTTP 429), Arctic Shift is tried before giving up.
+    // Pagination is time-cursor based: `after` holds the created_utc (unix seconds)
     // of the last item from the previous page, passed back as `before` since we always
-    // walk newest -> oldest. No `sort`/`time` mapping — the API only orders by time.
-    // NOTE: no md2html — renderComment() uses the raw `body` field, so asking the
-    // server to render HTML was pure overhead. (Also skipped the `fields` selector:
-    // its allowlist rejects permalink/subreddit_name_prefixed, which the cards need.)
-    let url = "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + encodeURIComponent(username) + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider";
-    if (after) url += "&before=" + encodeURIComponent(after);
-    let res;
+    // walk newest -> oldest. No `sort`/`time` mapping — both only order by time.
+    const before = after ? encodeURIComponent(Math.floor(after)) : null;
+    const u = encodeURIComponent(username);
+    const sources = [
+      "https://api.pullpush.io/reddit/search/comment/?author=" + u + "&size=" + limit + "&sort=desc&sort_type=created_utc" + (before ? "&before=" + before : ""),
+      "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + u + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider" + (before ? "&before=" + before : ""),
+    ];
+    // Remember responses for a few minutes so reloading the profile or reopening the
+    // panel doesn't re-hit the APIs (PullPush in particular rate-limits aggressively).
+    const cacheKey = "rpu-comments:" + u + ":" + limit + ":" + (before || "");
+    let items = null;
     try {
-      res = await fetch(url, { headers: { Accept: "application/json" } });
-    } catch (e) {
-      throw busyError();
+      const hit = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
+      if (hit && Date.now() - hit.t < 10 * 60 * 1000) items = hit.items;
+    } catch (e) {}
+    if (!items) {
+      for (const url of sources) {
+        try {
+          const res = await fetch(url, { headers: { Accept: "application/json" } });
+          if (!res.ok) continue;
+          const json = await res.json();
+          items = json.data || [];
+          break;
+        } catch (e) { /* network/parse error — try the next source */ }
+      }
+      if (!items) throw busyError();
+      try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), items })); } catch (e) {}
     }
-    if (!res.ok) throw busyError();
-    const json = await res.json();
-    const items = json.data || [];
     const last = items[items.length - 1];
     return {
       items,
@@ -257,7 +270,8 @@
   // walks every page (100 at a time) up front and hands back the full list.
   async function fetchAllItems(tab, username, sort, time, onProgress, onFirstPage, onLaterPage) {
     let after = null, pages = 0, all = [];
-    const MAX_PAGES = 40; // Reddit's search index caps out around this many pages anyway
+    // Comments: just the latest 100 (one request) for now — no walking older history.
+    const MAX_PAGES = tab === "comments" ? 1 : 40; // posts: Reddit's search index caps out around 40 pages
     do {
       const result = tab === "posts"
         ? await fetchPosts(username, after, sort, time, 100)
@@ -636,7 +650,7 @@
       return (item.body || "").toLowerCase().includes(q) || (item.link_title || "").toLowerCase().includes(q);
     }
 
-    // Arctic Shift only orders comments by time, so "Hot"/"Top" have nothing server-side
+    // PullPush only orders comments by time, so "Hot"/"Top" have nothing server-side
     // to request — instead just re-sort the already-fetched full list by score. "New" and
     // "Relevance" keep the API's chronological order (there's no real relevance signal
     // without a search query to be relevant to).
@@ -771,7 +785,7 @@
       // Posts are only safe to reuse when the Posts tab's own fetch was itself the full
       // history — i.e. the default New/All-time — otherwise Insights needs its own fetch.
       const canReusePosts = state.posts.fullyLoaded && state.sort === "new" && state.time === "all";
-      const canReuseComments = state.comments.items.length >= INSIGHT_COMMENT_LIMIT;
+      const canReuseComments = state.comments.fullyLoaded; // comments are a single page of up to 100 now
 
       if (canReusePosts && canReuseComments) {
         state.insights.data = tallySubreddits(state.posts.items, state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT));
@@ -887,7 +901,7 @@
         reapplySortOrRefetch();
       });
 
-      // Comments are fully cached client-side and Arctic Shift only orders by time, so a
+      // Comments are fully cached client-side and PullPush only orders by time, so a
       // sort/time change there just re-sorts what's already loaded — no need to re-fetch.
       // Posts still hit Reddit's real search API, where a different sort is a different
       // result set, so those genuinely need a fresh fetch.

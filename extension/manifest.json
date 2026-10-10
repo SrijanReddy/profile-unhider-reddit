@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Profile Unhider",
-  "version": "3.3.2",
+  "version": "3.3.4",
   "description": "Surface publicly indexed posts and comments for hidden Reddit profiles. Data sourced from Reddit's public search index.",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["https://www.reddit.com/*"],
