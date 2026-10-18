@@ -538,3 +538,57 @@
 #rpu-panel .rpu-insight-split {
   font-size: 10px; font-weight: 500; color: #878a8c; text-align: right;
 }
+
+/* ── rating nudge ── */
+#rpu-rate-nudge {
+  border-top: 1px solid #343536;
+  padding: 10px 14px;
+  background: #1a1a1b;
+}
+.rpu-rate-nudge-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rpu-rate-nudge-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d7dadc;
+}
+.rpu-rate-nudge-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rpu-rate-nudge-rate {
+  background: #ff4500;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rpu-rate-nudge-rate:hover { background: #e03d00; }
+.rpu-rate-nudge-snooze {
+  background: transparent;
+  color: #878a8c;
+  border: 1px solid #343536;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rpu-rate-nudge-snooze:hover { color: #d7dadc; border-color: #4a4b4c; }
+.rpu-rate-nudge-dismiss {
+  background: transparent;
+  color: #878a8c;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.rpu-rate-nudge-dismiss:hover { color: #d7dadc; }

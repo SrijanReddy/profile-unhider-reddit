@@ -6,6 +6,7 @@
 
   /* ── session tracking (in-memory, resets on tab close/reload) ── */
   const _sessionRevealed = new Set();
+  let _rateNudgeShown = false;
 
   /* ── helpers ── */
   function esc(str) {
@@ -128,6 +129,57 @@
   function trackPosts(count) {
     chrome.storage.local.get(["postsSurfaced"], (res) => {
       chrome.storage.local.set({ postsSurfaced: (res.postsSurfaced || 0) + count });
+    });
+  }
+
+  /* ── rating nudge: ask once the user has had a few successful reveals ── */
+  const RATE_NUDGE_MIN_REVEALS = 3;
+  const RATE_NUDGE_SNOOZE_MS = 7 * 24 * 3600 * 1000;
+
+  function maybeShowRatingNudge() {
+    if (_rateNudgeShown) return;
+    chrome.storage.local.get(
+      ["profilesRevealed", "ratingNudgeDismissed", "ratingNudgeSnoozedUntil"],
+      (res) => {
+        if ((res.profilesRevealed || 0) < RATE_NUDGE_MIN_REVEALS) return;
+        if (res.ratingNudgeDismissed) return;
+        if (res.ratingNudgeSnoozedUntil && Date.now() < res.ratingNudgeSnoozedUntil) return;
+        _rateNudgeShown = true;
+        showRatingNudge();
+      }
+    );
+  }
+
+  function showRatingNudge() {
+    const panel = document.getElementById("rpu-panel");
+    if (!panel || document.getElementById("rpu-rate-nudge")) return;
+    const isFirefox = navigator.userAgent.indexOf("Firefox") !== -1;
+    const reviewUrl = isFirefox
+      ? "https://addons.mozilla.org/firefox/addon/profile-unhider/reviews/"
+      : "https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp/reviews";
+    const nudge = document.createElement("div");
+    nudge.id = "rpu-rate-nudge";
+    nudge.innerHTML =
+      '<div class="rpu-rate-nudge-inner">' +
+      '<span class="rpu-rate-nudge-text">Enjoying Profile Unhider?</span>' +
+      '<div class="rpu-rate-nudge-btns">' +
+      '<button class="rpu-rate-nudge-rate" id="rpu-rate-yes">Leave a rating</button>' +
+      '<button class="rpu-rate-nudge-snooze" id="rpu-rate-later">Not now</button>' +
+      '<button class="rpu-rate-nudge-dismiss" id="rpu-rate-never" title="Don\'t ask again">✕</button>' +
+      "</div></div>";
+    panel.appendChild(nudge);
+    document.getElementById("rpu-rate-yes").addEventListener("click", () => {
+      chrome.storage.local.set({ ratingNudgeDismissed: true });
+      window.open(reviewUrl, "_blank", "noopener");
+      nudge.remove();
+    });
+    document.getElementById("rpu-rate-later").addEventListener("click", () => {
+      chrome.storage.local.set({ ratingNudgeSnoozedUntil: Date.now() + RATE_NUDGE_SNOOZE_MS });
+      nudge.remove();
+    });
+    document.getElementById("rpu-rate-never").addEventListener("click", () => {
+      chrome.storage.local.set({ ratingNudgeDismissed: true });
+      nudge.remove();
     });
   }
 
@@ -862,6 +914,7 @@
       if (panelEl) return;
       panelEl = buildPanel(username);
       triggerWrap.after(panelEl);
+      maybeShowRatingNudge();
 
       // Tab clicks
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
