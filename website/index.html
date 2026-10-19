@@ -86,7 +86,10 @@
         <a href="#faq">FAQ</a>
         <a href="privacy/">Privacy</a>
       </div>
-      <a class="btn" href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Add to Chrome</a>
+      <div class="nav-cta">
+        <button class="btn btn-ghost" id="support-open" type="button">Support</button>
+        <a class="btn" href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Add to Chrome</a>
+      </div>
     </div>
   </nav>
 
@@ -299,6 +302,28 @@
       <span class="foot-note">© 2026 Profile Unhider · Not affiliated with Reddit.</span>
     </div>
   </footer>
+
+  <div class="modal-backdrop" id="support-modal" role="dialog" aria-modal="true" aria-labelledby="support-title">
+    <div class="modal">
+      <button class="modal-close" id="support-close" aria-label="Close">✕</button>
+      <h3 id="support-title">Contact support</h3>
+      <p class="lede">Describe the problem and we'll get back to you. Goes straight to the developer's support board.</p>
+      <form id="support-form" novalidate>
+        <div class="field">
+          <label for="support-email">Email</label>
+          <input type="email" id="support-email" name="email" placeholder="you@example.com" required autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="support-message">What's happening?</label>
+          <textarea id="support-message" name="message" placeholder="e.g. The panel shows nothing on old Reddit profiles…" required></textarea>
+        </div>
+        <input type="text" name="_honey" id="support-honey" style="display:none" tabindex="-1" autocomplete="off">
+        <p class="fineprint">Only the developer sees this — it's not posted publicly.</p>
+        <p class="form-error" id="support-error" role="alert"></p>
+        <button class="btn btn-modal-submit" type="submit" id="support-submit">Send message</button>
+      </form>
+    </div>
+  </div>
 
   <script src="app.js" defer></script>
 </body>

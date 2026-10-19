@@ -10,6 +10,14 @@
   const statPosts = document.getElementById("stat-posts");
   const resetBtn = document.getElementById("reset-btn");
   const refreshBtn = document.getElementById("refresh-btn");
+  const supportLink = document.getElementById("support-link");
+
+  /* ── Support: deep-link to the website's support form ── */
+  if (supportLink) {
+    supportLink.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://profile-unhider.vercel.app/#support" });
+    });
+  }
 
   const defaultView = document.getElementById("default-view");
   const whatsNewView = document.getElementById("whats-new-view");
