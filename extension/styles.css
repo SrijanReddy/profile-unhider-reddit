@@ -541,9 +541,8 @@
 
 /* ── rating nudge ── */
 #rpu-rate-nudge {
-  border-top: 1px solid #343536;
+  background: #ff4500;
   padding: 10px 14px;
-  background: #1a1a1b;
 }
 .rpu-rate-nudge-inner {
   display: flex;
@@ -554,8 +553,8 @@
 }
 .rpu-rate-nudge-text {
   font-size: 13px;
-  font-weight: 600;
-  color: #d7dadc;
+  font-weight: 700;
+  color: #fff;
 }
 .rpu-rate-nudge-btns {
   display: flex;
@@ -563,8 +562,8 @@
   gap: 8px;
 }
 .rpu-rate-nudge-rate {
-  background: #ff4500;
-  color: #fff;
+  background: #fff;
+  color: #ff4500;
   border: none;
   border-radius: 20px;
   padding: 6px 14px;
@@ -572,23 +571,24 @@
   font-weight: 700;
   cursor: pointer;
 }
-.rpu-rate-nudge-rate:hover { background: #e03d00; }
+.rpu-rate-nudge-rate:hover { background: #ffe9e0; }
 .rpu-rate-nudge-snooze {
   background: transparent;
-  color: #878a8c;
-  border: 1px solid #343536;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 20px;
   padding: 5px 12px;
   font-size: 12px;
   cursor: pointer;
 }
-.rpu-rate-nudge-snooze:hover { color: #d7dadc; border-color: #4a4b4c; }
+.rpu-rate-nudge-snooze:hover { border-color: #fff; }
 .rpu-rate-nudge-dismiss {
   background: transparent;
-  color: #878a8c;
+  color: #fff;
   border: none;
   font-size: 13px;
   cursor: pointer;
   padding: 4px 6px;
+  opacity: 0.8;
 }
-.rpu-rate-nudge-dismiss:hover { color: #d7dadc; }
+.rpu-rate-nudge-dismiss:hover { opacity: 1; }

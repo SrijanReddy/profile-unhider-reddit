@@ -167,7 +167,9 @@
       '<button class="rpu-rate-nudge-snooze" id="rpu-rate-later">Not now</button>' +
       '<button class="rpu-rate-nudge-dismiss" id="rpu-rate-never" title="Don\'t ask again">✕</button>' +
       "</div></div>";
-    panel.appendChild(nudge);
+    const head = panel.querySelector(".rpu-head");
+    if (head) head.after(nudge);
+    else panel.prepend(nudge);
     document.getElementById("rpu-rate-yes").addEventListener("click", () => {
       chrome.storage.local.set({ ratingNudgeDismissed: true });
       window.open(reviewUrl, "_blank", "noopener");
