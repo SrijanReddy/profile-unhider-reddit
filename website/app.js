@@ -17,9 +17,28 @@
     var supportError = document.getElementById("support-error");
     var supportSubmit = document.getElementById("support-submit");
 
+    var SUPPORT_COOLDOWN_MS = 5 * 60 * 1000; // one message per 5 minutes per browser
+    var SUPPORT_LAST_SENT_KEY = "rpu-support-last-sent";
+
+    function cooldownRemainingMs() {
+      var last = parseInt(localStorage.getItem(SUPPORT_LAST_SENT_KEY) || "0", 10);
+      var elapsed = Date.now() - last;
+      return elapsed < SUPPORT_COOLDOWN_MS ? SUPPORT_COOLDOWN_MS - elapsed : 0;
+    }
+
     function openSupport() {
       supportModal.classList.add("open");
       document.body.style.overflow = "hidden";
+      var remaining = cooldownRemainingMs();
+      if (remaining > 0) {
+        var mins = Math.ceil(remaining / 60000);
+        supportError.textContent = "You just sent a message — please wait " + mins + " minute" + (mins > 1 ? "s" : "") + " before sending another.";
+        supportError.classList.add("show");
+        supportSubmit.disabled = true;
+      } else {
+        supportError.classList.remove("show");
+        supportSubmit.disabled = false;
+      }
       var email = document.getElementById("support-email");
       if (email) email.focus();
     }
@@ -51,6 +70,11 @@
         var message = document.getElementById("support-message").value.trim();
         var honey = document.getElementById("support-honey").value;
         if (honey) return; // bot
+        var remaining = cooldownRemainingMs();
+        if (remaining > 0) {
+          var mins = Math.ceil(remaining / 60000);
+          return fail("Please wait " + mins + " minute" + (mins > 1 ? "s" : "") + " before sending another message.");
+        }
         if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
           return fail("Please enter a valid email address.");
         }
@@ -75,6 +99,7 @@
           if (!res.ok) throw new Error("send failed");
           return res.json();
         }).then(function () {
+          try { localStorage.setItem(SUPPORT_LAST_SENT_KEY, String(Date.now())); } catch (e) {}
           supportForm.innerHTML =
             '<p class="lede" style="margin-bottom:0">✓ Message sent — we\'ll get back to you at ' +
             email.replace(/&/g, "&amp;").replace(/</g, "&lt;") +
