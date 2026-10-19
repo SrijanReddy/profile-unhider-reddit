@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Profile Unhider",
-  "version": "3.3.4",
+  "version": "3.4.0",
   "description": "Surface publicly indexed posts and comments for hidden Reddit profiles. Data sourced from Reddit's public search index.",
   "browser_specific_settings": {
     "gecko": {
@@ -9,8 +9,14 @@
       "strict_min_version": "109.0"
     }
   },
-  "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["https://www.reddit.com/*"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.reddit.com/*"
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -25,13 +31,22 @@
     }
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["https://www.reddit.com/*"],
-      "js": ["content.js","hovercard.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://www.reddit.com/*"
+      ],
+      "js": [
+        "content.js",
+        "hovercard.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
       "run_at": "document_idle"
     }
   ]
