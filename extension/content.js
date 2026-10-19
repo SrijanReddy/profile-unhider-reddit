@@ -923,6 +923,8 @@
         btn.addEventListener("click", () => {
           const tab = btn.dataset.tab;
           getEl("rpu-sort-bar").style.display = tab === "insights" ? "none" : "flex";
+          // Comments are always chronological — the sort buttons are meaningless there
+          panelEl.querySelector(".rpu-sort-options").style.display = tab === "comments" ? "none" : "flex";
           if (tab !== "insights") {
             // Reset sort to new when switching tabs
             state.sort = "new";
