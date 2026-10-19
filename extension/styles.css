@@ -569,6 +569,10 @@
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 .rpu-rate-nudge-rate:hover { background: #ffe9e0; }
@@ -579,6 +583,10 @@
   border-radius: 20px;
   padding: 5px 12px;
   font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 .rpu-rate-nudge-snooze:hover { border-color: #fff; }
