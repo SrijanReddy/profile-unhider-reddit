@@ -7,7 +7,7 @@
   // (board menu → ... → More → Email-to-board settings).
   // Note: this address is visible in the page source; anyone with it can
   // create cards. Trello lets you regenerate it if it's ever abused.
-  var TRELLO_BOARD_EMAIL = "YOUR_TRELLO_BOARD_EMAIL";
+  var TRELLO_BOARD_EMAIL = "srijanreddy1+we7aar9nsa7qkrx2h6kq@boards.trello.com";
 
   var supportModal = document.getElementById("support-modal");
   if (supportModal) {
