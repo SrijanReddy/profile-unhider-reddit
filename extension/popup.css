@@ -15,7 +15,7 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
   box-shadow: 0 0 10px rgba(255,69,0,0.15);
 }
 .logo-name { font-size: 13px; font-weight: 600; color: #fafafa; display: block; }
-.logo-sub { font-size: 10px; color: #52525b; }
+.logo-sub { font-size: 10px; color: #a1a1aa; }
 .toggle {
   width: 38px; height: 21px; background: #ff4500; border-radius: 11px;
   position: relative; cursor: pointer; border: none; flex-shrink: 0;
@@ -45,7 +45,7 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 .status-dot.idle { background: #3f3f46; }
 .status-dot.disabled { background: #3f3f46; }
 .status-text strong { font-size: 12px; font-weight: 500; color: #fafafa; display: block; margin-bottom: 1px; }
-.status-text span { font-size: 11px; color: #52525b; }
+.status-text span { font-size: 11px; color: #a1a1aa; }
 
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 12px 8px; }
 .stat {
@@ -59,13 +59,13 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
   background: linear-gradient(90deg, transparent, rgba(255,69,0,0.4), transparent);
 }
 .stat-num { font-size: 22px; font-weight: 700; color: #ff4500; line-height: 1; margin-bottom: 4px; text-shadow: 0 0 12px rgba(255,69,0,0.4); }
-.stat-label { font-size: 10px; color: #52525b; letter-spacing: 0.05em; text-transform: uppercase; }
+.stat-label { font-size: 10px; color: #a1a1aa; letter-spacing: 0.05em; text-transform: uppercase; }
 
 .reset-wrap { margin: 0 12px 12px; }
 .reset-btn {
   width: 100%; padding: 8px; background: transparent;
   border: 1px solid #1f1f1f; border-radius: 8px;
-  font-size: 11px; color: #52525b; cursor: pointer; font-family: inherit;
+  font-size: 11px; color: #a1a1aa; cursor: pointer; font-family: inherit;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: border-color 0.15s, color 0.15s;
 }
@@ -76,7 +76,7 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
   display: flex; align-items: center; justify-content: space-between;
   background: linear-gradient(0deg, #0d0a09 0%, #0a0a0b 100%);
 }
-.site-link { font-size: 11px; color: #3f3f46; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
+.site-link { font-size: 11px; color: #71717a; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
 .site-link:hover { color: #ff4500; }
 .support-link {
   font-size: 11px; color: #ff4500; background: none; border: none; cursor: pointer;
@@ -84,7 +84,7 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
   font-family: inherit; font-weight: 700; transition: color 0.15s;
 }
 .support-link:hover { color: #ff6a2b; }
-.version { font-size: 10px; color: #27272a; }
+.version { font-size: 10px; color: #52525b; }
 
 .refresh-icon-btn {
   width: 26px; height: 26px; border-radius: 7px;
