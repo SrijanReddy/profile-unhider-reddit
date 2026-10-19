@@ -78,6 +78,12 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 }
 .site-link { font-size: 11px; color: #3f3f46; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
 .site-link:hover { color: #ff4500; }
+.support-link {
+  font-size: 11px; color: #3f3f46; background: none; border: none; cursor: pointer;
+  display: flex; align-items: center; gap: 4px; padding: 0;
+  font-family: inherit; transition: color 0.15s;
+}
+.support-link:hover { color: #ff4500; }
 .version { font-size: 10px; color: #27272a; }
 
 .refresh-icon-btn {
