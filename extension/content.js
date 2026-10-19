@@ -133,7 +133,7 @@
   }
 
   /* ── rating nudge: ask once the user has had a few successful reveals ── */
-  const RATE_NUDGE_MIN_REVEALS = 3;
+  const RATE_NUDGE_MIN_REVEALS = 2;
   const RATE_NUDGE_SNOOZE_MS = 7 * 24 * 3600 * 1000;
 
   function maybeShowRatingNudge() {
