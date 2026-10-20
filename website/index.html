@@ -39,7 +39,7 @@
       {
         "@type": "Question",
         "name": "Does this show private content?",
-        "acceptedAnswer": { "@type": "Answer", "text": "No. It only surfaces what Reddit has already indexed in its public search. If Reddit's own search can find it, the extension can show it — private, deleted, or non-public content never appears." }
+        "acceptedAnswer": { "@type": "Answer", "text": "No. It only surfaces what Reddit has already indexed in its public search. If Reddit's own search can find it, the extension can show it — private, deleted, or non-public content that still appears in search results." }
       },
       {
         "@type": "Question",
@@ -59,16 +59,20 @@
       {
         "@type": "Question",
         "name": "Is this against Reddit's rules?",
-        "acceptedAnswer": { "@type": "Answer", "text": "The extension uses Reddit's public search API in a read-only, non-commercial way. It doesn't scrape, store, or redistribute data — everything shown is already publicly searchable on Reddit itself." }
+        "acceptedAnswer": { "@type": "Answer", "text": "The extension uses Reddit's public search API in a read-only, non-commercial way. It doesn't scrape, store, or redistribute data — everything shown is already public and visible to the browser." }
       }
     ]
   }
   </script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23ff6942'/%3E%3Ccircle cx='16' cy='13' r='5' fill='none' stroke='%23171613' stroke-width='2.5'/%3E%3Cpath d='M7 23c2.5-4 5.5-6 9-6s6.5 2 9 6' fill='none' stroke='%23171613' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23ff6942'/%3E%3Ccircle cx='16' cy='13' r='5' fill='white'/%3E%3Cpath d='M8 23c2.2-3 5.1-4.5 8-4.5s5.8 1.5 8 4.5' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 
@@ -270,7 +274,7 @@
 
       <details class="faq-item" open>
         <summary>Does this show private content?</summary>
-        <div class="answer">No. It only surfaces what Reddit has already indexed in its public search. If Reddit's own search can find it, the extension can show it — private, deleted, or non-public content never appears.</div>
+        <div class="answer">No. It only surfaces what Reddit has already indexed in its public search. If Reddit's own search can find it, the extension can show it — private, deleted, or non-public content that still appears in search results.</div>
       </details>
 
       <details class="faq-item">
@@ -290,7 +294,7 @@
 
       <details class="faq-item">
         <summary>Is this against Reddit's rules?</summary>
-        <div class="answer">The extension uses Reddit's public search API in a read-only, non-commercial way. It doesn't scrape, store, or redistribute data — everything shown is already publicly searchable on Reddit itself.</div>
+        <div class="answer">The extension uses Reddit's public search API in a read-only, non-commercial way. It doesn't scrape, store, or redistribute data — everything shown is already public and visible to the browser.</div>
       </details>
     </div>
   </section>
