@@ -4,6 +4,15 @@
   /* ── flag ── */
   window.__rpuInjected = false;
 
+  /* ── which Reddit are we on? ──
+     old.reddit.com is a completely different (server-rendered) site from the
+     redesign: different DOM, no shreddit web components, and API calls must be
+     same-origin. ORIGIN keeps both the fetches and the links we render on
+     whichever Reddit the user is actually browsing. */
+  const IS_OLD_REDDIT = location.hostname === "old.reddit.com";
+  const ORIGIN = location.origin;
+  if (IS_OLD_REDDIT) document.documentElement.classList.add("rpu-old");
+
   /* ── session tracking (in-memory, resets on tab close/reload) ── */
   const _sessionRevealed = new Set();
 
@@ -15,7 +24,7 @@
   }
 
   function timeAgo(utc) {
-    const s = Math.floor(Date.now() / 1000) - utc;
+    const s = Math.max(0, Math.floor(Date.now() / 1000 - utc));
     if (s < 60) return s + "s ago";
     if (s < 3600) return Math.floor(s / 60) + "m ago";
     if (s < 86400) return Math.floor(s / 3600) + "h ago";
@@ -35,7 +44,24 @@
   }
 
   /* ── detection ── */
+  // Old Reddit never says "hidden" — a hidden profile just renders an empty overview
+  // ("there doesn't seem to be anything here") while the sidebar still shows karma.
+  // That same notice is legitimate on a /comments or /submitted tab of a public user
+  // who has only posts or only comments, so only trust it on the overview, and only
+  // when karma proves the account has activity (same heuristic as the hover badges).
+  function isOldRedditProfileHidden() {
+    if (!/^\/(user|u)\/[^/]+\/?(overview\/?)?$/i.test(location.pathname)) return false;
+    const text = (document.body.innerText || "").toLowerCase();
+    if (!text.includes("there doesn't seem to be anything here") && !document.getElementById("noresults")) return false;
+    const num = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? parseInt(el.textContent.replace(/[^0-9]/g, ""), 10) || 0 : 0;
+    };
+    return num(".side .karma") + num(".side .comment-karma") > 0;
+  }
+
   function isProfileHidden() {
+    if (IS_OLD_REDDIT) return isOldRedditProfileHidden();
     const text = (document.body.innerText || "").toLowerCase();
     const phrases = [
       "likes to keep their posts hidden",
@@ -49,6 +75,7 @@
   }
 
   function findHiddenMessageEl() {
+    if (IS_OLD_REDDIT) return findHiddenMessageElOld();
     const msgEl = Array.from(document.querySelectorAll("div")).find(
       (e) => e.childElementCount === 0 && e.textContent.includes("likes to keep their posts hidden")
     );
@@ -68,6 +95,26 @@
     return null;
   }
 
+  // Old Reddit: the page is a plain server-rendered column (div.content > #siteTable).
+  // The "hidden" notice is an ordinary text element inside it, of unknown tag, so look
+  // for any leaf element carrying the phrase and climb to the child of the content
+  // column — never above it, or we'd hide the whole page.
+  function findHiddenMessageElOld() {
+    const container = document.querySelector('div.content[role="main"]') || document.querySelector("div.content") || document.body;
+    const phrases = ["there doesn't seem to be anything here", "likes to keep their posts hidden", "profile is hidden", "set their profile to private", "hidden by the user"];
+    const msgEl = document.getElementById("noresults") || Array.from(container.querySelectorAll("div, p, span, h1, h2, h3, li")).find(
+      (e) => e.childElementCount === 0 && phrases.some((p) => e.textContent.toLowerCase().includes(p))
+    );
+    if (msgEl) {
+      let el = msgEl;
+      while (el.parentElement && el.parentElement !== container && el.parentElement.id !== "siteTable" && el.parentElement !== document.body) {
+        el = el.parentElement;
+      }
+      return el;
+    }
+    return document.getElementById("siteTable") || container.firstElementChild;
+  }
+
   /* ── fallback banner ── */
   const FALLBACK_MSGS = [
     "Extension didn't trigger on this page — refresh to retry",
@@ -80,6 +127,9 @@
 
     // Only show on user profile pages
     if (!getUsername()) return;
+    // Old Reddit is server-rendered: nothing loads late, so "refresh to retry" would
+    // only ever be noise on ordinary public profiles.
+    if (IS_OLD_REDDIT) return;
 
     // Get cycling message index from storage
     chrome.storage.local.get(["fallbackMsgIndex"], (res) => {
@@ -135,7 +185,7 @@
   async function fetchPosts(username, after, sort, time, limit) {
     sort = sort || "new";
     limit = limit || 25;
-    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=${limit}&sort=${sort}`;
+    let url = `${ORIGIN}/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=${limit}&sort=${sort}`;
     if (sort === "top" && time) url += `&t=${time}`;
     if (after) url += `&after=${encodeURIComponent(after)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -166,7 +216,7 @@
       var postId = parts[3];
       var sub = stub.subreddit;
       if (!postId) return null;
-      var url = "https://www.reddit.com/r/" + sub + "/comments/" + postId + ".json?limit=500&raw_json=1";
+      var url = ORIGIN + "/r/" + sub + "/comments/" + postId + ".json?limit=500&raw_json=1";
       var r = await fetch(url, { headers: { Accept: "application/json" } });
       if (!r.ok) return null;
       var data = await r.json();
@@ -234,7 +284,7 @@
        Used before switching to Arctic Shift above. Uncomment this block and
        comment out the block above to revert, if Arctic Shift ever stops working.
     sort = sort || "new";
-    let url = "https://www.reddit.com/user/" + encodeURIComponent(username) + "/comments.json?limit=" + limit + "&sort=" + sort + "&raw_json=1";
+    let url = ORIGIN + "/user/" + encodeURIComponent(username) + "/comments.json?limit=" + limit + "&sort=" + sort + "&raw_json=1";
     if (sort === "top" && time) url += "&t=" + time;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -252,7 +302,7 @@
        listing endpoint ever stops working.
     sort = sort || "new";
     const q = encodeURIComponent('Author:"' + username + '"');
-    let url = "https://www.reddit.com/search.json?q=" + q + "&type=comment&limit=25&sort=" + sort + "&raw_json=1";
+    let url = ORIGIN + "/search.json?q=" + q + "&type=comment&limit=25&sort=" + sort + "&raw_json=1";
     if (sort === "top" && time) url += "&t=" + time;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -329,7 +379,7 @@
       return { items, after: (last && items.length === 100) ? last.created_utc : null };
     }
 
-    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
+    let url = `${ORIGIN}/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (res.status === 429) { const e = new Error("Rate limited by Reddit — showing partial results"); e.rateLimited = true; throw e; }
@@ -410,12 +460,12 @@
         <div class="rpu-thumb">${thumbHtml}</div>
         <div class="rpu-card-body">
           <div class="rpu-card-meta">
-            <a class="rpu-subreddit" href="https://www.reddit.com/r/${esc(p.subreddit)}/" target="_blank" rel="noopener">${esc(p.subreddit_name_prefixed || "r/" + p.subreddit)}</a>
+            <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(p.subreddit)}/" target="_blank" rel="noopener">${esc(p.subreddit_name_prefixed || "r/" + p.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(p.created_utc)}</span>
             ${p.over_18 ? '<span class="rpu-nsfw-tag">NSFW</span>' : ""}
           </div>
-          <a class="rpu-card-title" href="https://www.reddit.com${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+          <a class="rpu-card-title" href="${ORIGIN}${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.title)}</a>
           <div class="rpu-card-footer">
             <span class="rpu-comments-count">${commentIcon(11)} ${p.num_comments || 0} comments</span>
           </div>
@@ -429,14 +479,14 @@
     const hasBody = rawBody.trim().length > 0;
     const match = (c.permalink || "").match(/\/comments\/([a-z0-9]+)\/[^/]*\/([a-z0-9]+)/i);
     const commentUrl = match
-      ? `https://www.reddit.com/r/${esc(c.subreddit)}/comments/${match[1]}/_/${match[2]}/?context=3`
-      : `https://www.reddit.com${esc(c.permalink)}?context=3`;
+      ? `${ORIGIN}/r/${esc(c.subreddit)}/comments/${match[1]}/_/${match[2]}/?context=3`
+      : `${ORIGIN}${esc(c.permalink)}?context=3`;
     return `
       <div class="rpu-card rpu-comment-card">
         <div class="rpu-vote">${upArrow()}<span class="rpu-score">${fmtScore(c.score || 0)}</span></div>
         <div class="rpu-card-body">
           <div class="rpu-card-meta">
-            <a class="rpu-subreddit" href="https://www.reddit.com/r/${esc(c.subreddit)}/" target="_blank" rel="noopener">${esc(c.subreddit_name_prefixed || "r/" + c.subreddit)}</a>
+            <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(c.subreddit)}/" target="_blank" rel="noopener">${esc(c.subreddit_name_prefixed || "r/" + c.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(c.created_utc)}</span>
           </div>
@@ -460,7 +510,7 @@
     return entries.map((e) => `
       <div class="rpu-insight-row">
         <div class="rpu-insight-row-main">
-          <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
+          <a class="rpu-insight-sub" href="${ORIGIN}/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
           <div class="rpu-insight-bar-track">
             <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
           </div>
@@ -573,7 +623,9 @@
     trackProfile(username);
 
     // Disclaimer in profile header
-    const profileMain = document.querySelector('[data-testid="profile-main"], div.px-md.relative.pt-md');
+    const profileMain = IS_OLD_REDDIT
+      ? (document.querySelector('div.content[role="main"]') || document.querySelector("div.content"))
+      : document.querySelector('[data-testid="profile-main"], div.px-md.relative.pt-md');
     if (profileMain && !document.getElementById("rpu-disclaimer")) {
       const disclaimer = document.createElement("div");
       disclaimer.id = "rpu-disclaimer";
@@ -587,7 +639,14 @@
             <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from Reddit's public search index. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
           </div>
         </div>`;
-      profileMain.appendChild(disclaimer);
+      if (IS_OLD_REDDIT) {
+        // Old Reddit has no profile header card to attach to — put the notice at the
+        // top of the column, right under the sort bar, like the redesign's header.
+        const menu = profileMain.querySelector(".menuarea");
+        if (menu) menu.after(disclaimer); else profileMain.prepend(disclaimer);
+      } else {
+        profileMain.appendChild(disclaimer);
+      }
     }
 
     const anchor = findHiddenMessageEl();
@@ -611,7 +670,12 @@
         <div class="rpu-trigger-sub">Shows posts &amp; comments from Reddit's search index</div>
       </div>`;
 
-    anchor.parentElement.insertBefore(triggerWrap, anchor);
+    // Old Reddit: sit directly under the sort bar rather than wherever the notice
+    // happens to be (there can be a lot of empty space between the two).
+    const oldMenu = IS_OLD_REDDIT && document.querySelector("div.content .menuarea");
+    const oldAfter = oldMenu && document.getElementById("rpu-disclaimer") ? document.getElementById("rpu-disclaimer") : oldMenu;
+    if (oldAfter && oldAfter.parentElement === anchor.parentElement) oldAfter.after(triggerWrap);
+    else anchor.parentElement.insertBefore(triggerWrap, anchor);
     anchor.style.display = "none";
 
     let panelEl = null;

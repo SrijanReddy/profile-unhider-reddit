@@ -538,3 +538,18 @@
 #rpu-panel .rpu-insight-split {
   font-size: 10px; font-weight: 500; color: #878a8c; text-align: right;
 }
+
+/* ── Old Reddit (html.rpu-old) ──
+   The redesign gives us a fixed-width feed column to sit in; old Reddit's content
+   area is fluid and stretches edge to edge, so give the unhider the same column. */
+html.rpu-old #rpu-disclaimer,
+html.rpu-old #rpu-trigger-wrap,
+html.rpu-old #rpu-panel {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+html.rpu-old #rpu-disclaimer { padding: 12px 0 12px; }
+html.rpu-old #rpu-trigger-wrap { margin-top: 4px; }
+html.rpu-old #rpu-panel { border-radius: 8px; margin-bottom: 24px; }

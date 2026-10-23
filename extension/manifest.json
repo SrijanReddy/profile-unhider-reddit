@@ -4,7 +4,7 @@
   "version": "3.3.4",
   "description": "Surface publicly indexed posts and comments for hidden Reddit profiles. Data sourced from Reddit's public search index.",
   "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["https://www.reddit.com/*"],
+  "host_permissions": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -23,7 +23,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.reddit.com/*"],
+      "matches": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
       "js": ["content.js","hovercard.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
