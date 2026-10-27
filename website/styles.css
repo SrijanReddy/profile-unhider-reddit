@@ -124,6 +124,13 @@ section { scroll-margin-top: 96px; }
   font-weight: 600;
 }
 
+.nav-cta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 /* ---------- Hero ---------- */
 .hero {
   padding: 88px 0 72px;
@@ -538,3 +545,85 @@ footer { padding: 44px 0 56px; }
   .hero { padding: 60px 0 52px; }
   .demo { min-height: 400px; }
 }
+
+/* ---------- Support modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  position: relative;
+  width: 460px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.modal h3 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+.modal .lede {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.modal .field { margin-bottom: 16px; }
+.modal .field label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 7px;
+}
+.modal .field input,
+.modal .field textarea {
+  width: 100%;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font: 400 14px var(--font-body);
+  padding: 11px 13px;
+  outline: none;
+}
+.modal .field input:focus,
+.modal .field textarea:focus { border-color: var(--accent); }
+.modal .field textarea { min-height: 110px; resize: vertical; }
+.modal .fineprint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 18px;
+  line-height: 1.5;
+}
+.modal .form-error {
+  display: none;
+  font-size: 13px;
+  color: #ff7a59;
+  margin: -8px 0 14px;
+}
+.modal .form-error.show { display: block; }
+.btn-modal-submit { width: 100%; padding: 13px; font-size: 15px; justify-content: center; }
+.btn-modal-submit:disabled { opacity: 0.6; cursor: default; }
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+.modal-close:hover { color: var(--ink); }

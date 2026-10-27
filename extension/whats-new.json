@@ -24,6 +24,26 @@
       }
     ]
   },
+  "3.4.0": {
+    "title": "What's new",
+    "items": [
+      {
+        "icon": "⭐",
+        "title": "Enjoying it?",
+        "desc": "A gentle nudge to leave a rating after your second reveal"
+      },
+      {
+        "icon": "💬",
+        "title": "Support, built in",
+        "desc": "New Support button in the popup — reach us without leaving the extension"
+      },
+      {
+        "icon": "🧹",
+        "title": "Cleaner comments tab",
+        "desc": "Removed the sort buttons that never worked; comments stay newest-first"
+      }
+    ]
+  },
   "3.3.2": {
     "title": "What's new",
     "items": [
