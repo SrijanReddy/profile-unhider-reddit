@@ -4,9 +4,44 @@
   /* ── flag ── */
   window.__rpuInjected = false;
 
+  /* ── which Reddit are we on? ──
+     old.reddit.com is a completely different (server-rendered) site from the
+     redesign: different DOM, no shreddit web components, and API calls must be
+     same-origin. ORIGIN keeps both the fetches and the links we render on
+     whichever Reddit the user is actually browsing. */
+  const IS_OLD_REDDIT = location.hostname === "old.reddit.com";
+  const ORIGIN = location.origin;
+  if (IS_OLD_REDDIT) document.documentElement.classList.add("rpu-old");
+
   /* ── session tracking (in-memory, resets on tab close/reload) ── */
   const _sessionRevealed = new Set();
   let _rateNudgeShown = false;
+
+  /* ── theme ──
+     Default follows the OS (prefers-color-scheme). The popup's and the panel's
+     sun/moon buttons store an explicit "light"/"dark" in chrome.storage, which sets
+     data-rpu-theme on <html>; styles.css keys off that attribute. */
+  function effectiveTheme() {
+    const t = document.documentElement.getAttribute("data-rpu-theme");
+    if (t) return t;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function themeIcon() {
+    // Show where a click takes you: a sun while dark, a moon while light.
+    return effectiveTheme() === "dark"
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  }
+  function applyTheme(t) {
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-rpu-theme", t);
+    else document.documentElement.removeAttribute("data-rpu-theme");
+    const btn = document.getElementById("rpu-theme");
+    if (btn) btn.innerHTML = themeIcon();
+  }
+  chrome.storage.local.get(["theme"], (res) => applyTheme(res.theme));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.theme) applyTheme(changes.theme.newValue);
+  });
 
   /* ── helpers ── */
   function esc(str) {
@@ -16,7 +51,7 @@
   }
 
   function timeAgo(utc) {
-    const s = Math.floor(Date.now() / 1000) - utc;
+    const s = Math.max(0, Math.floor(Date.now() / 1000 - utc));
     if (s < 60) return s + "s ago";
     if (s < 3600) return Math.floor(s / 60) + "m ago";
     if (s < 86400) return Math.floor(s / 3600) + "h ago";
@@ -36,7 +71,24 @@
   }
 
   /* ── detection ── */
+  // Old Reddit never says "hidden" — a hidden profile just renders an empty overview
+  // ("there doesn't seem to be anything here") while the sidebar still shows karma.
+  // That same notice is legitimate on a /comments or /submitted tab of a public user
+  // who has only posts or only comments, so only trust it on the overview, and only
+  // when karma proves the account has activity (same heuristic as the hover badges).
+  function isOldRedditProfileHidden() {
+    if (!/^\/(user|u)\/[^/]+\/?(overview\/?)?$/i.test(location.pathname)) return false;
+    const text = (document.body.innerText || "").toLowerCase();
+    if (!text.includes("there doesn't seem to be anything here") && !document.getElementById("noresults")) return false;
+    const num = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? parseInt(el.textContent.replace(/[^0-9]/g, ""), 10) || 0 : 0;
+    };
+    return num(".side .karma") + num(".side .comment-karma") > 0;
+  }
+
   function isProfileHidden() {
+    if (IS_OLD_REDDIT) return isOldRedditProfileHidden();
     const text = (document.body.innerText || "").toLowerCase();
     const phrases = [
       "likes to keep their posts hidden",
@@ -50,6 +102,7 @@
   }
 
   function findHiddenMessageEl() {
+    if (IS_OLD_REDDIT) return findHiddenMessageElOld();
     const msgEl = Array.from(document.querySelectorAll("div")).find(
       (e) => e.childElementCount === 0 && e.textContent.includes("likes to keep their posts hidden")
     );
@@ -69,6 +122,26 @@
     return null;
   }
 
+  // Old Reddit: the page is a plain server-rendered column (div.content > #siteTable).
+  // The "hidden" notice is an ordinary text element inside it, of unknown tag, so look
+  // for any leaf element carrying the phrase and climb to the child of the content
+  // column — never above it, or we'd hide the whole page.
+  function findHiddenMessageElOld() {
+    const container = document.querySelector('div.content[role="main"]') || document.querySelector("div.content") || document.body;
+    const phrases = ["there doesn't seem to be anything here", "likes to keep their posts hidden", "profile is hidden", "set their profile to private", "hidden by the user"];
+    const msgEl = document.getElementById("noresults") || Array.from(container.querySelectorAll("div, p, span, h1, h2, h3, li")).find(
+      (e) => e.childElementCount === 0 && phrases.some((p) => e.textContent.toLowerCase().includes(p))
+    );
+    if (msgEl) {
+      let el = msgEl;
+      while (el.parentElement && el.parentElement !== container && el.parentElement.id !== "siteTable" && el.parentElement !== document.body) {
+        el = el.parentElement;
+      }
+      return el;
+    }
+    return document.getElementById("siteTable") || container.firstElementChild;
+  }
+
   /* ── fallback banner ── */
   const FALLBACK_MSGS = [
     "Extension didn't trigger on this page — refresh to retry",
@@ -81,6 +154,9 @@
 
     // Only show on user profile pages
     if (!getUsername()) return;
+    // Old Reddit is server-rendered: nothing loads late, so "refresh to retry" would
+    // only ever be noise on ordinary public profiles.
+    if (IS_OLD_REDDIT) return;
 
     // Get cycling message index from storage
     chrome.storage.local.get(["fallbackMsgIndex"], (res) => {
@@ -186,19 +262,23 @@
   }
 
   /* ── API: fetch posts ── */
+  // Posts use the same archive mechanism as comments (see fetchArchive). The archives
+  // only order by time, so `sort`/`time` are applied client-side — see sortedItems().
   async function fetchPosts(username, after, sort, time, limit) {
+    return fetchArchive("submission", username, after, limit);
+
+    /* ── fallback (pre-2026-10-25): Reddit's own search.json ──
+       Used before posts moved to the archives above. Swap to revert.
     sort = sort || "new";
     limit = limit || 25;
-    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=${limit}&sort=${sort}`;
+    let url = `${ORIGIN}/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=${limit}&sort=${sort}`;
     if (sort === "top" && time) url += `&t=${time}`;
     if (after) url += `&after=${encodeURIComponent(after)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error("Reddit API returned " + res.status);
     const json = await res.json();
-    return {
-      items: json.data.children.map((c) => c.data),
-      after: json.data.after || null,
-    };
+    return { items: json.data.children.map((c) => c.data), after: json.data.after || null };
+    */
   }
 
   /* ── comments ── */
@@ -220,7 +300,7 @@
       var postId = parts[3];
       var sub = stub.subreddit;
       if (!postId) return null;
-      var url = "https://www.reddit.com/r/" + sub + "/comments/" + postId + ".json?limit=500&raw_json=1";
+      var url = ORIGIN + "/r/" + sub + "/comments/" + postId + ".json?limit=500&raw_json=1";
       var r = await fetch(url, { headers: { Accept: "application/json" } });
       if (!r.ok) return null;
       var data = await r.json();
@@ -242,8 +322,11 @@
     e.friendly = true;
     return e;
   }
-//fetch-comments
-  async function fetchComments(username, after, sort, time, limit) {
+  // Shared by posts and comments. Third-party archival indexes (not live Reddit
+  // endpoints), so they aren't subject to a hidden profile's own listing restriction.
+  // Comments try PullPush first, posts try Arctic Shift first; on an error, rate limit (429)
+  // or an empty first page (coverage has gaps) the other one is tried before giving up.
+  async function fetchArchive(kind, username, after, limit) {
     limit = Math.min(limit || 25, 100); // both archives cap page size at 100
     // Third-party archival indexes (not live Reddit endpoints), so they aren't subject
     // to the account's own "hide profile" listing restriction. PullPush is tried first;
@@ -254,16 +337,18 @@
     const before = after ? encodeURIComponent(Math.floor(after)) : null;
     const u = encodeURIComponent(username);
     const sources = [
-      "https://api.pullpush.io/reddit/search/comment/?author=" + u + "&size=" + limit + "&sort=desc&sort_type=created_utc" + (before ? "&before=" + before : ""),
-      "https://arctic-shift.photon-reddit.com/api/comments/search?author=" + u + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider" + (before ? "&before=" + before : ""),
+      "https://api.pullpush.io/reddit/search/" + (kind === "comment" ? "comment" : "submission") + "/?author=" + u + "&size=" + limit + "&sort=desc&sort_type=created_utc" + (before ? "&before=" + before : ""),
+      "https://arctic-shift.photon-reddit.com/api/" + (kind === "comment" ? "comments" : "posts") + "/search?author=" + u + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider" + (before ? "&before=" + before : ""),
     ];
+    // Posts try Arctic Shift first, comments try PullPush first.
+    if (kind !== "comment") sources.reverse();
     // Remember responses for a few minutes so reloading the profile or reopening the
     // panel doesn't re-hit the APIs (PullPush in particular rate-limits aggressively).
-    const cacheKey = "rpu-comments:" + u + ":" + limit + ":" + (before || "");
+    const cacheKey = "rpu-" + kind + ":" + u + ":" + limit + ":" + (before || "");
     let items = null;
     try {
       const hit = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
-      if (hit && Date.now() - hit.t < 10 * 60 * 1000) items = hit.items;
+      if (hit && hit.items.length && Date.now() - hit.t < 10 * 60 * 1000) items = hit.items; // never serve a cached "empty"
     } catch (e) {}
     if (!items) {
       for (const url of sources) {
@@ -271,24 +356,34 @@
           const res = await fetch(url, { headers: { Accept: "application/json" } });
           if (!res.ok) continue;
           const json = await res.json();
-          items = json.data || [];
+          const got = json.data || [];
+          // The archives have different coverage: PullPush can answer 200 with an empty
+          // list for a user Arctic Shift has plenty of. An empty *first* page is
+          // suspicious, so try the next source before concluding there's nothing.
+          if (!got.length && !before && url !== sources[sources.length - 1]) { items = items || got; continue; }
+          items = got;
           break;
         } catch (e) { /* network/parse error — try the next source */ }
       }
       if (!items) throw busyError();
-      try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), items })); } catch (e) {}
+      if (items.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), items })); } catch (e) {} }
     }
     const last = items[items.length - 1];
     return {
       items,
       after: (last && items.length === limit) ? last.created_utc : null,
     };
+  }
+
+//fetch-comments
+  async function fetchComments(username, after, sort, time, limit) {
+    return fetchArchive("comment", username, after, limit);
 
     /* ── fallback (pre-2026-08-25 v2): direct /user/<name>/comments.json ──
        Used before switching to Arctic Shift above. Uncomment this block and
        comment out the block above to revert, if Arctic Shift ever stops working.
     sort = sort || "new";
-    let url = "https://www.reddit.com/user/" + encodeURIComponent(username) + "/comments.json?limit=" + limit + "&sort=" + sort + "&raw_json=1";
+    let url = ORIGIN + "/user/" + encodeURIComponent(username) + "/comments.json?limit=" + limit + "&sort=" + sort + "&raw_json=1";
     if (sort === "top" && time) url += "&t=" + time;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -306,7 +401,7 @@
        listing endpoint ever stops working.
     sort = sort || "new";
     const q = encodeURIComponent('Author:"' + username + '"');
-    let url = "https://www.reddit.com/search.json?q=" + q + "&type=comment&limit=25&sort=" + sort + "&raw_json=1";
+    let url = ORIGIN + "/search.json?q=" + q + "&type=comment&limit=25&sort=" + sort + "&raw_json=1";
     if (sort === "top" && time) url += "&t=" + time;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -324,8 +419,9 @@
   // walks every page (100 at a time) up front and hands back the full list.
   async function fetchAllItems(tab, username, sort, time, onProgress, onFirstPage, onLaterPage) {
     let after = null, pages = 0, all = [];
-    // Comments: just the latest 100 (one request) for now — no walking older history.
-    const MAX_PAGES = tab === "comments" ? 1 : 40; // posts: Reddit's search index caps out around 40 pages
+    // Posts and comments: just the latest 100 (one request each) for now — no walking
+    // older history. Raise this to load more pages (the cursor paging is already in place).
+    const MAX_PAGES = 1;
     do {
       const result = tab === "posts"
         ? await fetchPosts(username, after, sort, time, 100)
@@ -383,7 +479,7 @@
       return { items, after: (last && items.length === 100) ? last.created_utc : null };
     }
 
-    let url = `https://www.reddit.com/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
+    let url = `${ORIGIN}/search.json?q=author%3A${encodeURIComponent(username)}&type=link&limit=100&sort=new`;
     if (after) url += "&after=" + encodeURIComponent(after);
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (res.status === 429) { const e = new Error("Rate limited by Reddit — showing partial results"); e.rateLimited = true; throw e; }
@@ -464,12 +560,12 @@
         <div class="rpu-thumb">${thumbHtml}</div>
         <div class="rpu-card-body">
           <div class="rpu-card-meta">
-            <a class="rpu-subreddit" href="https://www.reddit.com/r/${esc(p.subreddit)}/" target="_blank" rel="noopener">${esc(p.subreddit_name_prefixed || "r/" + p.subreddit)}</a>
+            <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(p.subreddit)}/" target="_blank" rel="noopener">${esc(p.subreddit_name_prefixed || "r/" + p.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(p.created_utc)}</span>
             ${p.over_18 ? '<span class="rpu-nsfw-tag">NSFW</span>' : ""}
           </div>
-          <a class="rpu-card-title" href="https://www.reddit.com${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+          <a class="rpu-card-title" href="${ORIGIN}${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.title)}</a>
           <div class="rpu-card-footer">
             <span class="rpu-comments-count">${commentIcon(11)} ${p.num_comments || 0} comments</span>
           </div>
@@ -478,19 +574,27 @@
   }
 
   function renderComment(c) {
-    const rawBody = c.body || "";
-    const body = esc(rawBody.slice(0, 300)) + (rawBody.length > 300 ? "…" : "");
-    const hasBody = rawBody.trim().length > 0;
+    // Reddit stores GIFs as markdown like ![gif](giphy|ID) and images as bare
+    // preview.redd.it / i.redd.it links. Pull those out first (so the 300-char
+    // truncation can't cut one in half) and render them as real <img>s.
+    const media = [];
+    let rawBody = (c.body || "")
+      .replace(/!\[[^\]]*\]\(giphy\|([A-Za-z0-9]+)[^)]*\)/g, (m, id) => { media.push(`https://media.giphy.com/media/${id}/giphy.gif`); return ""; })
+      .replace(/https?:\/\/(?:preview|i)\.redd\.it\/[^\s)]+/g, (u) => { media.push(u.replace(/&amp;/g, "&")); return ""; })
+      .trim();
+    const body = esc(rawBody.slice(0, 300)) + (rawBody.length > 300 ? "…" : "")
+      + media.map((u) => `<img class="rpu-comment-img" src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`).join("");
+    const hasBody = rawBody.length > 0 || media.length > 0;
     const match = (c.permalink || "").match(/\/comments\/([a-z0-9]+)\/[^/]*\/([a-z0-9]+)/i);
     const commentUrl = match
-      ? `https://www.reddit.com/r/${esc(c.subreddit)}/comments/${match[1]}/_/${match[2]}/?context=3`
-      : `https://www.reddit.com${esc(c.permalink)}?context=3`;
+      ? `${ORIGIN}/r/${esc(c.subreddit)}/comments/${match[1]}/_/${match[2]}/?context=3`
+      : `${ORIGIN}${esc(c.permalink)}?context=3`;
     return `
       <div class="rpu-card rpu-comment-card">
         <div class="rpu-vote">${upArrow()}<span class="rpu-score">${fmtScore(c.score || 0)}</span></div>
         <div class="rpu-card-body">
           <div class="rpu-card-meta">
-            <a class="rpu-subreddit" href="https://www.reddit.com/r/${esc(c.subreddit)}/" target="_blank" rel="noopener">${esc(c.subreddit_name_prefixed || "r/" + c.subreddit)}</a>
+            <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(c.subreddit)}/" target="_blank" rel="noopener">${esc(c.subreddit_name_prefixed || "r/" + c.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(c.created_utc)}</span>
           </div>
@@ -514,7 +618,7 @@
     return entries.map((e) => `
       <div class="rpu-insight-row">
         <div class="rpu-insight-row-main">
-          <a class="rpu-insight-sub" href="https://www.reddit.com/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
+          <a class="rpu-insight-sub" href="${ORIGIN}/r/${esc(e.sub)}/" target="_blank" rel="noopener">r/${esc(e.sub)}</a>
           <div class="rpu-insight-bar-track">
             <div class="rpu-insight-bar-fill" style="width:${Math.max(4, Math.round((e.total / maxTotal) * 100))}%"></div>
           </div>
@@ -545,7 +649,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" class="rpu-insight-search" id="rpu-insight-search" placeholder="Search subreddit…" autocomplete="off" />
       </div>` : ""}
-      <p class="rpu-insight-note">Comment counts are based on the latest 100 comments.</p>
+      <p class="rpu-insight-note">Based on the latest 100 posts and latest 100 comments.</p>
       ${data.cancelled ? `<p class="rpu-insight-note">Scan stopped early (rate limited) — showing partial results.</p>` : ""}
       <div class="rpu-insight-list" id="rpu-insight-list">${renderInsightRows(entries, maxTotal, "")}</div>`;
   }
@@ -563,9 +667,12 @@
             <p class="rpu-sub-label">Profile hidden <span class="rpu-index-badge">via search index</span></p>
           </div>
         </div>
-        <button class="rpu-close-btn" id="rpu-close" title="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <div class="rpu-head-actions">
+          <button class="rpu-close-btn" id="rpu-theme" title="Switch light / dark mode">${themeIcon()}</button>
+          <button class="rpu-close-btn" id="rpu-close" title="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
       </div>
       <div class="rpu-tabs">
         <button class="rpu-tab rpu-tab-active" data-tab="posts">
@@ -627,7 +734,9 @@
     trackProfile(username);
 
     // Disclaimer in profile header
-    const profileMain = document.querySelector('[data-testid="profile-main"], div.px-md.relative.pt-md');
+    const profileMain = IS_OLD_REDDIT
+      ? (document.querySelector('div.content[role="main"]') || document.querySelector("div.content"))
+      : document.querySelector('[data-testid="profile-main"], div.px-md.relative.pt-md');
     if (profileMain && !document.getElementById("rpu-disclaimer")) {
       const disclaimer = document.createElement("div");
       disclaimer.id = "rpu-disclaimer";
@@ -641,7 +750,14 @@
             <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from Reddit's public search index. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
           </div>
         </div>`;
-      profileMain.appendChild(disclaimer);
+      if (IS_OLD_REDDIT) {
+        // Old Reddit has no profile header card to attach to — put the notice at the
+        // top of the column, right under the sort bar, like the redesign's header.
+        const menu = profileMain.querySelector(".menuarea");
+        if (menu) menu.after(disclaimer); else profileMain.prepend(disclaimer);
+      } else {
+        profileMain.appendChild(disclaimer);
+      }
     }
 
     const anchor = findHiddenMessageEl();
@@ -665,7 +781,12 @@
         <div class="rpu-trigger-sub">Shows posts &amp; comments from Reddit's search index</div>
       </div>`;
 
-    anchor.parentElement.insertBefore(triggerWrap, anchor);
+    // Old Reddit: sit directly under the sort bar rather than wherever the notice
+    // happens to be (there can be a lot of empty space between the two).
+    const oldMenu = IS_OLD_REDDIT && document.querySelector("div.content .menuarea");
+    const oldAfter = oldMenu && document.getElementById("rpu-disclaimer") ? document.getElementById("rpu-disclaimer") : oldMenu;
+    if (oldAfter && oldAfter.parentElement === anchor.parentElement) oldAfter.after(triggerWrap);
+    else anchor.parentElement.insertBefore(triggerWrap, anchor);
     anchor.style.display = "none";
 
     let panelEl = null;
@@ -704,13 +825,18 @@
       return (item.body || "").toLowerCase().includes(q) || (item.link_title || "").toLowerCase().includes(q);
     }
 
-    // PullPush only orders comments by time, so "Hot"/"Top" have nothing server-side
+    // The archives only order by time, so "Hot"/"Top" have nothing server-side
     // to request — instead just re-sort the already-fetched full list by score. "New" and
     // "Relevance" keep the API's chronological order (there's no real relevance signal
     // without a search query to be relevant to).
     function sortedItems(tab) {
-      const items = state[tab].items;
-      if (tab === "comments" && (state.sort === "hot" || state.sort === "top")) {
+      let items = state[tab].items;
+      // "Top" + a time window (Today / This week / …) filters by age, like Reddit's own.
+      if (state.sort === "top" && state.time !== "all") {
+        const span = { day: 86400, week: 604800, month: 2592000, year: 31536000 }[state.time];
+        if (span) { const cutoff = Date.now() / 1000 - span; items = items.filter((i) => i.created_utc >= cutoff); }
+      }
+      if (state.sort === "hot" || state.sort === "top") {
         return [...items].sort((a, b) => (b.score || 0) - (a.score || 0));
       }
       return items;
@@ -833,16 +959,14 @@
       if (state.insights.loading) { showScanWaiting(); return; } // scan already running — just re-show the waiting room
       clearContent();
 
-      // Insights only looks at the user's latest 100 comments (one request) — it no
-      // longer walks their full comment history. Reuse the Comments tab's cache when it
-      // already holds at least 100 (it's newest-first); otherwise fetch just that page.
-      // Posts are only safe to reuse when the Posts tab's own fetch was itself the full
-      // history — i.e. the default New/All-time — otherwise Insights needs its own fetch.
-      const canReusePosts = state.posts.fullyLoaded && state.sort === "new" && state.time === "all";
-      const canReuseComments = state.comments.fullyLoaded; // comments are a single page of up to 100 now
+      // Insights only looks at the user's latest 100 posts and latest 100 comments
+      // (one request each) — it no longer walks their full history. Both tabs cache
+      // exactly that newest-first page, so reuse it once loaded; otherwise fetch it.
+      const canReusePosts = state.posts.fullyLoaded;
+      const canReuseComments = state.comments.fullyLoaded;
 
       if (canReusePosts && canReuseComments) {
-        state.insights.data = tallySubreddits(state.posts.items, state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT));
+        state.insights.data = tallySubreddits(state.posts.items.slice(0, INSIGHT_COMMENT_LIMIT), state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT));
         state.insights.loaded = true;
         renderInsightsView();
         return;
@@ -854,7 +978,7 @@
         // Posts and comments are independent — fetch them concurrently instead of back-to-back.
         const [postItems, commentItems] = await Promise.all([
           canReusePosts
-            ? state.posts.items
+            ? state.posts.items.slice(0, INSIGHT_COMMENT_LIMIT)
             : fetchAllItems("posts", username, "new", "all", (count) => {
                 if (state.activeTab === "insights") showScanWaiting(`posts, ${count} found`);
               }),
@@ -964,7 +1088,7 @@
       // result set, so those genuinely need a fresh fetch.
       function reapplySortOrRefetch() {
         const tab = state.activeTab;
-        if (tab === "comments" && state[tab].loaded) {
+        if (state[tab].loaded) {
           state[tab].page = 0;
           renderItems();
           return;
@@ -984,6 +1108,9 @@
       getEl("rpu-next-page").addEventListener("click", () => goToPage(1));
 
       getEl("rpu-close").addEventListener("click", closePanel);
+      getEl("rpu-theme").addEventListener("click", () => {
+        chrome.storage.local.set({ theme: effectiveTheme() === "dark" ? "light" : "dark" });
+      });
       loadTab("posts");
     }
 

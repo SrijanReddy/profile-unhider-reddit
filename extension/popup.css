@@ -129,3 +129,31 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 }
 .wn-cta:hover { box-shadow: 0 0 20px rgba(255,69,0,0.5); }
 .wn-cta:active { transform: scale(0.98); }
+
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.theme-btn {
+  width: 26px; height: 26px; border-radius: 7px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid #1f1f1f; color: #a1a1aa;
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-btn:hover { border-color: #ff4500; color: #ff4500; }
+
+/* ── Light theme ── */
+html[data-theme="light"] body, html[data-theme="light"] .popup { background: #ffffff; }
+html[data-theme="light"] .header { background: linear-gradient(180deg, #fff3ee 0%, #ffffff 100%); border-bottom-color: #e4e4e7; }
+html[data-theme="light"] .logo-name, html[data-theme="light"] .status-text strong { color: #18181b; }
+html[data-theme="light"] .logo-sub, html[data-theme="light"] .status-text span, html[data-theme="light"] .stat-label { color: #71717a; }
+html[data-theme="light"] .status-box, html[data-theme="light"] .stat { background: #fafafa; border-color: #e4e4e7; }
+html[data-theme="light"] .toggle.off { background: #d4d4d8; }
+html[data-theme="light"] .reset-btn, html[data-theme="light"] .theme-btn { border-color: #e4e4e7; color: #71717a; }
+html[data-theme="light"] .reset-btn:hover, html[data-theme="light"] .theme-btn:hover { border-color: #ff4500; color: #ff4500; }
+html[data-theme="light"] .footer { border-top-color: #e4e4e7; background: #ffffff; }
+html[data-theme="light"] .site-link { color: #71717a; }
+html[data-theme="light"] .version { color: #a1a1aa; }
+html[data-theme="light"] .status-dot.idle, html[data-theme="light"] .status-dot.disabled { background: #a1a1aa; }
+html[data-theme="light"] .wn-title { color: #18181b; }
+html[data-theme="light"] .wn-item { background: #fafafa; border-color: #e4e4e7; }
+html[data-theme="light"] .wn-item-text strong { color: #18181b; }
+html[data-theme="light"] .wn-item-text span { color: #52525b; }
+html[data-theme="light"] .wn-cta { color: #ffffff; }
