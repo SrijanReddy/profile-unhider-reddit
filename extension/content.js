@@ -315,64 +315,110 @@
     } catch(e) { return null; }
   }
 
-  // PullPush being slow/overloaded/down all look the same to the user — show one
-  // friendly message instead of a raw status code.
+  /* ── network: one request at a time, two servers, health-aware ──
+     Server 1 = Arctic Shift, Server 2 = PullPush. The user only ever sees "Server 1" /
+     "Server 2" (never the service names). Requests are strictly serialized with a pause
+     between them, because the free archives answer bursts with 403/429. A server that
+     fails is put on a cooldown and the other one is used; both busy surfaces a friendly
+     "a lot of traffic" error with a retry countdown. */
+  const REQUEST_GAP_MS = 1500;
+  const REQUEST_TIMEOUT_MS = 12000;
+  const BACKOFF_MS = [10000, 30000, 60000];
+  const net = {
+    servers: [
+      { n: 1, state: "ok", until: 0, fails: 0, ms: null,
+        url: (kind, u, limit, before) => "https://arctic-shift.photon-reddit.com/api/" + (kind === "comment" ? "comments" : "posts") + "/search?author=" + u + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider" + (before ? "&before=" + before : "") },
+      { n: 2, state: "ok", until: 0, fails: 0, ms: null,
+        url: (kind, u, limit, before) => "https://api.pullpush.io/reddit/search/" + (kind === "comment" ? "comment" : "submission") + "/?author=" + u + "&size=" + limit + "&sort=desc&sort_type=created_utc" + (before ? "&before=" + before : "") },
+    ],
+    preferred: 0,        // 0 = automatic (Server 1 first); 1 or 2 = the user picked one
+    active: 0,           // server that answered the last request
+    source: null,        // "cache" or a server number, for the footer
+    failedOver: false,
+    lastEnd: 0,
+    chain: Promise.resolve(),
+    listeners: new Set(),
+  };
+  const netNotify = () => net.listeners.forEach((f) => f());
+  const serverBusy = (s) => Date.now() < s.until;
+  const retryInSeconds = () => Math.max(0, Math.ceil((Math.min(...net.servers.map((s) => s.until)) - Date.now()) / 1000));
+
   function busyError() {
     const e = new Error("A lot of traffic right now, please try again in a bit.");
     e.friendly = true;
+    e.retryIn = retryInSeconds();
     return e;
   }
-  // Shared by posts and comments. Third-party archival indexes (not live Reddit
-  // endpoints), so they aren't subject to a hidden profile's own listing restriction.
-  // Comments try PullPush first, posts try Arctic Shift first; on an error, rate limit (429)
-  // or an empty first page (coverage has gaps) the other one is tried before giving up.
+
+  function enqueue(task) {
+    const run = net.chain.then(async () => {
+      const wait = net.lastEnd + REQUEST_GAP_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      try { return await task(); } finally { net.lastEnd = Date.now(); }
+    });
+    net.chain = run.catch(() => {});
+    return run;
+  }
+
+  function markFailure(s, res) {
+    s.fails++;
+    let wait = BACKOFF_MS[Math.min(s.fails - 1, BACKOFF_MS.length - 1)];
+    const reset = res ? Number(res.headers.get("x-ratelimit-reset")) : 0; // seconds, when the server exposes it
+    if (reset > 0 && reset < 600) wait = reset * 1000;
+    s.until = Date.now() + wait;
+    s.state = "busy";
+  }
+
+  async function requestFromServers(kind, u, limit, before) {
+    const order = [...net.servers];
+    if (net.preferred) order.sort((a, b) => (a.n === net.preferred ? -1 : 0) - (b.n === net.preferred ? -1 : 0));
+    let emptyFirstPage = null;
+    for (const s of order) {
+      if (serverBusy(s)) continue;
+      const t0 = Date.now(), ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const res = await fetch(s.url(kind, u, limit, before), { headers: { Accept: "application/json" }, signal: ctl.signal });
+        if (!res.ok) { markFailure(s, res); netNotify(); continue; }
+        const got = (await res.json()).data || [];
+        s.state = "ok"; s.fails = 0; s.until = 0; s.ms = Date.now() - t0;
+        // The archives have different coverage: one can answer 200 with an empty list for a
+        // user the other has plenty of. An empty *first* page is suspicious, so try the other.
+        if (!got.length && !before && s !== order[order.length - 1]) { emptyFirstPage = got; netNotify(); continue; }
+        net.active = s.n; net.source = s.n; net.failedOver = s.n !== order[0].n;
+        netNotify();
+        return got;
+      } catch (e) {
+        markFailure(s, null); netNotify();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    if (emptyFirstPage) return emptyFirstPage;
+    throw busyError();
+  }
+
+  // Shared by posts and comments. Pagination is time-cursor based: `after` holds the
+  // created_utc (unix seconds) of the last item from the previous page, passed back as
+  // `before`. Both archives cap page size at 100 and only order by time.
   async function fetchArchive(kind, username, after, limit) {
-    limit = Math.min(limit || 25, 100); // both archives cap page size at 100
-    // Third-party archival indexes (not live Reddit endpoints), so they aren't subject
-    // to the account's own "hide profile" listing restriction. PullPush is tried first;
-    // if it errors or rate-limits (HTTP 429), Arctic Shift is tried before giving up.
-    // Pagination is time-cursor based: `after` holds the created_utc (unix seconds)
-    // of the last item from the previous page, passed back as `before` since we always
-    // walk newest -> oldest. No `sort`/`time` mapping — both only order by time.
+    limit = Math.min(limit || 25, 100);
     const before = after ? encodeURIComponent(Math.floor(after)) : null;
     const u = encodeURIComponent(username);
-    const sources = [
-      "https://api.pullpush.io/reddit/search/" + (kind === "comment" ? "comment" : "submission") + "/?author=" + u + "&size=" + limit + "&sort=desc&sort_type=created_utc" + (before ? "&before=" + before : ""),
-      "https://arctic-shift.photon-reddit.com/api/" + (kind === "comment" ? "comments" : "posts") + "/search?author=" + u + "&limit=" + limit + "&sort=desc&meta-app=profile-unhider" + (before ? "&before=" + before : ""),
-    ];
-    // Posts try Arctic Shift first, comments try PullPush first.
-    if (kind !== "comment") sources.reverse();
     // Remember responses for a few minutes so reloading the profile or reopening the
-    // panel doesn't re-hit the APIs (PullPush in particular rate-limits aggressively).
+    // panel costs no requests. Never serve (or save) a cached "empty".
     const cacheKey = "rpu-" + kind + ":" + u + ":" + limit + ":" + (before || "");
     let items = null;
     try {
       const hit = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
-      if (hit && hit.items.length && Date.now() - hit.t < 10 * 60 * 1000) items = hit.items; // never serve a cached "empty"
+      if (hit && hit.items.length && Date.now() - hit.t < 10 * 60 * 1000) { items = hit.items; net.source = "cache"; }
     } catch (e) {}
     if (!items) {
-      for (const url of sources) {
-        try {
-          const res = await fetch(url, { headers: { Accept: "application/json" } });
-          if (!res.ok) continue;
-          const json = await res.json();
-          const got = json.data || [];
-          // The archives have different coverage: PullPush can answer 200 with an empty
-          // list for a user Arctic Shift has plenty of. An empty *first* page is
-          // suspicious, so try the next source before concluding there's nothing.
-          if (!got.length && !before && url !== sources[sources.length - 1]) { items = items || got; continue; }
-          items = got;
-          break;
-        } catch (e) { /* network/parse error — try the next source */ }
-      }
-      if (!items) throw busyError();
+      items = await enqueue(() => requestFromServers(kind, u, limit, before));
       if (items.length) { try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), items })); } catch (e) {} }
     }
     const last = items[items.length - 1];
-    return {
-      items,
-      after: (last && items.length === limit) ? last.created_utc : null,
-    };
+    return { items, after: (last && items.length === limit) ? last.created_utc : null };
   }
 
 //fetch-comments
@@ -458,7 +504,7 @@
       entry.comments++;
       subs.set(key, entry);
     }
-    return { subs, totalPosts: postItems.length, totalComments: commentItems.length, cancelled: false };
+    return { subs, totalPosts: postItems.length, totalComments: commentItems.length, cancelled: false, postItems, commentItems };
   }
 
   /* ── fallback (pre-2026-08-25): Insights' own independent network scan ──
@@ -634,7 +680,68 @@
       .sort((a, b) => b.total - a.total);
   }
 
-  function renderInsights(data) {
+  /* ── activity heatmap (GitHub-style): one square per day, last 26 weeks ── */
+  const HEAT_WEEKS = 26;
+  const HEAT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dayKey = (d) => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+  const dayLabel = (d) => d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+  function renderHeat(data, metric) {
+    const counts = new Map();
+    let oldest = Infinity;
+    const add = (items, k) => items.forEach((i) => {
+      if (!i.created_utc) return;
+      oldest = Math.min(oldest, i.created_utc);
+      const key = dayKey(new Date(i.created_utc * 1000));
+      const e = counts.get(key) || { p: 0, c: 0 };
+      e[k]++; counts.set(key, e);
+    });
+    add(data.postItems || [], "p"); add(data.commentItems || [], "c");
+    const val = (e) => (metric === "posts" ? e.p : metric === "comments" ? e.c : e.p + e.c);
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const start = new Date(today); start.setDate(start.getDate() - ((HEAT_WEEKS - 1) * 7 + today.getDay()));
+    const firstLoaded = isFinite(oldest) ? new Date(oldest * 1000) : today; firstLoaded.setHours(0, 0, 0, 0);
+
+    let cells = "", months = "", lastMonth = -1, total = 0, bestDay = null, bestVal = 0, run = 0, streak = 0, activeDays = 0;
+    for (let i = 0; i < HEAT_WEEKS * 7; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      if (i % 7 === 0 && (d.getMonth() !== lastMonth) && (i === 0 || d.getDate() <= 7)) {
+        lastMonth = d.getMonth();
+        months += `<span style="left:${(i / 7 / HEAT_WEEKS) * 100}%">${HEAT_MONTHS[lastMonth]}</span>`;
+      }
+      if (d > today) { cells += `<i class="rpu-hc" style="visibility:hidden"></i>`; continue; }
+      const e = counts.get(dayKey(d)) || { p: 0, c: 0 };
+      const v = val(e), out = d < firstLoaded;
+      if (!out) {
+        total += v; if (v > 0) activeDays++;
+        run = v > 0 ? run + 1 : 0; streak = Math.max(streak, run);
+        if (v > bestVal) { bestVal = v; bestDay = d; }
+      }
+      const lvl = out || v === 0 ? "" : v === 1 ? " l1" : v <= 3 ? " l2" : v <= 5 ? " l3" : " l4";
+      cells += `<i class="rpu-hc${lvl}${out ? " out" : ""}" data-d="${esc(dayLabel(d))}" data-p="${e.p}" data-c="${e.c}" data-out="${out ? 1 : 0}"></i>`;
+    }
+    const label = metric === "posts" ? "posts" : metric === "comments" ? "comments" : "posts and comments";
+    const chip = (m, t) => `<span class="${metric === m ? "on" : ""}" data-hm="${m}">${t}</span>`;
+    return `
+      <div class="rpu-heat" id="rpu-heat">
+        <div class="rpu-heat-top"><b>${total} ${label}</b><div class="rpu-heat-seg">${chip("all", "All")}${chip("posts", "Posts")}${chip("comments", "Comments")}</div></div>
+        <div class="rpu-heat-grid">
+          <div class="rpu-heat-days"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+          <div class="rpu-heat-main"><div class="rpu-heat-months">${months}</div><div class="rpu-heat-cells">${cells}</div></div>
+        </div>
+        <div class="rpu-heat-detail" id="rpu-heat-detail">Hover a day for details</div>
+        <div class="rpu-heat-foot"><span>Outlined days are older than the latest posts and comments we load.</span>
+          <span class="rpu-heat-legend">Less <i class="rpu-hc"></i><i class="rpu-hc l1"></i><i class="rpu-hc l2"></i><i class="rpu-hc l3"></i><i class="rpu-hc l4"></i> More</span></div>
+        <div class="rpu-heat-facts">
+          <div><b>${bestDay ? esc(dayLabel(bestDay)) : "-"}</b>busiest day</div>
+          <div><b>${streak} ${streak === 1 ? "day" : "days"}</b>longest streak</div>
+          <div><b>${activeDays}</b>active days</div>
+        </div>
+      </div>`;
+  }
+
+  function renderInsights(data, heatMetric) {
     const entries = insightEntries(data);
     const maxTotal = entries.length ? entries[0].total : 1;
 
@@ -644,13 +751,13 @@
         <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalPosts}</span><span class="rpu-insight-stat-label">posts</span></div>
         <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalComments}</span><span class="rpu-insight-stat-label">comments</span></div>
       </div>
+      ${renderHeat(data, heatMetric || "all")}
       ${entries.length ? `
       <div class="rpu-insight-search-wrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" class="rpu-insight-search" id="rpu-insight-search" placeholder="Search subreddit…" autocomplete="off" />
       </div>` : ""}
       <p class="rpu-insight-note">Based on the latest 100 posts and latest 100 comments.</p>
-      ${data.cancelled ? `<p class="rpu-insight-note">Scan stopped early (rate limited) — showing partial results.</p>` : ""}
       <div class="rpu-insight-list" id="rpu-insight-list">${renderInsightRows(entries, maxTotal, "")}</div>`;
   }
 
@@ -674,18 +781,19 @@
           </button>
         </div>
       </div>
+      <div class="rpu-servers" id="rpu-servers"></div>
       <div class="rpu-tabs">
         <button class="rpu-tab rpu-tab-active" data-tab="posts">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          Posts
+          <span class="rpu-tab-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span><svg class="rpu-tab-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Posts<span class="rpu-tab-tag" id="rpu-tag-posts"></span>
         </button>
         <button class="rpu-tab" data-tab="comments">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          Comments
+          <span class="rpu-tab-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><svg class="rpu-tab-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Comments<span class="rpu-tab-tag" id="rpu-tag-comments"></span>
         </button>
         <button class="rpu-tab" data-tab="insights">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-          Insights
+          <span class="rpu-tab-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span><svg class="rpu-tab-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Insights<span class="rpu-tab-tag" id="rpu-tag-insights"></span>
         </button>
       </div>
       <div class="rpu-sort-bar" id="rpu-sort-bar">
@@ -709,6 +817,7 @@
           </select>
         </div>
       </div>
+      <div class="rpu-notice" id="rpu-notice" hidden></div>
       <div class="rpu-content" id="rpu-content">
         <div class="rpu-loading" id="rpu-loading">
           <div class="rpu-spinner"></div><span>Fetching posts…</span>
@@ -722,7 +831,8 @@
         <button class="rpu-page-btn" id="rpu-next-page" title="Next page">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
-      </div>`;
+      </div>
+      <div class="rpu-footer" id="rpu-footer"></div>`;
     return panel;
   }
 
@@ -797,10 +907,12 @@
       activeTab: "posts",
       sort: "new",
       time: "all",
-      posts: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
-      comments: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0 },
+      heatMetric: "all",
+      posts: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0, error: null, retries: 0, retryAt: 0, retryTimer: null },
+      comments: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0, error: null, retries: 0, retryAt: 0, retryTimer: null },
       insights: { loaded: false, loading: false, data: null },
     };
+    let ticker = null;
 
     const getEl = (id) => document.getElementById(id);
 
@@ -815,7 +927,7 @@
 
     function clearContent() {
       const content = getEl("rpu-content");
-      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
+      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-heat, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
     }
 
     function itemMatches(tab, item, q) {
@@ -892,121 +1004,201 @@
       updatePagination(tab, totalPages);
     }
 
-    async function loadTab(tab) {
-      state.activeTab = tab;
+    /* ── the one-way pipeline: Posts, then Comments, then Insights ──
+       Comments only start (and unlock) once Posts are in; Insights only unlocks once
+       both are in and is built from them, so it never makes a request of its own. */
+    const mmss = (sec) => Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+    const STEP_LABEL = { posts: "posts", comments: "comments" };
+
+    function tabInfo() {
+      const P = state.posts, C = state.comments, I = state.insights;
+      return {
+        posts: { locked: false, tag: P.loaded ? String(P.items.length) : P.error ? "paused" : "loading", cls: P.loaded ? "ok" : P.error ? "" : "busy" },
+        comments: {
+          locked: !P.loaded,
+          tag: C.loaded ? String(C.items.length) : !P.loaded ? "after Posts" : C.error ? "paused" : "loading",
+          cls: C.loaded ? "ok" : P.loaded && !C.error ? "busy" : "",
+        },
+        insights: {
+          locked: !(P.loaded && C.loaded),
+          tag: I.loaded ? `${I.data.subs.size} subs` : P.loaded && C.loaded ? "building" : "after Comments",
+          cls: I.loaded ? "ok" : "",
+        },
+      };
+    }
+
+    function renderTabs() {
+      if (!panelEl) return;
+      const info = tabInfo();
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
-        btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab);
+        const t = btn.dataset.tab, i = info[t];
+        btn.classList.toggle("rpu-tab-locked", i.locked);
+        btn.setAttribute("aria-disabled", i.locked ? "true" : "false");
+        btn.title = i.locked ? (t === "comments" ? "Unlocks when Posts finish loading" : "Unlocks when Posts and Comments finish loading") : "";
+        const tag = getEl("rpu-tag-" + t);
+        if (tag) { tag.textContent = i.tag; tag.className = "rpu-tab-tag" + (i.cls ? " " + i.cls : ""); }
       });
-      getEl("rpu-item-search").value = "";
-      getEl("rpu-pagination").style.display = "none";
-      if (tab === "insights") { await loadInsights(); return; }
-      if (state[tab].loaded) { state[tab].page = 0; renderItems(); return; }
-      if (state[tab].loading) return; // a fetch for this tab is already in flight
-      state[tab].loading = true;
-      state[tab].fullyLoaded = false;
-      const fetchId = ++state[tab].fetchId; // stale callbacks from a superseded fetch no-op
-      const isCurrent = () => state[tab].fetchId === fetchId && state.activeTab === tab;
-      clearContent();
-      showLoading(tab === "comments" ? "Fetching comments…" : "Fetching posts…");
+    }
+
+    function serverStatus(s) {
+      if (serverBusy(s)) return { dot: "bad", text: "Busy · retry " + mmss(Math.ceil((s.until - Date.now()) / 1000)) };
+      if (net.active === s.n && s.ms != null) return { dot: "ok", text: "Online · " + s.ms + " ms" };
+      return { dot: "idle", text: s.ms != null ? "Standby" : "Ready" };
+    }
+
+    function renderServers() {
+      const el = getEl("rpu-servers");
+      if (!el) return;
+      const mk = (s) => {
+        const st = serverStatus(s), on = (net.preferred || net.active || 1) === s.n;
+        return `<button class="rpu-srv${on ? " on" : ""}" data-server="${s.n}" title="Use Server ${s.n}"><i class="rpu-dot ${st.dot}"></i>Server ${s.n}<small>${st.text}</small></button>`;
+      };
+      el.innerHTML = `<span class="rpu-srv-label">Server</span>${net.servers.map(mk).join("")}`;
+    }
+
+    function renderNotice() {
+      const el = getEl("rpu-notice");
+      if (!el) return;
+      const busy = net.servers.filter(serverBusy);
+      if (busy.length === 1 && net.failedOver) {
+        el.hidden = false;
+        el.innerHTML = `<b>Server ${busy[0].n} is busy. Using Server ${net.active}.</b><span>We'll check Server ${busy[0].n} again in ${mmss(Math.ceil((busy[0].until - Date.now()) / 1000))}. Nothing for you to do.</span>`;
+      } else { el.hidden = true; el.innerHTML = ""; }
+    }
+
+    function renderFooter() {
+      const el = getEl("rpu-footer");
+      if (!el) return;
+      const P = state.posts, C = state.comments;
+      const err = P.error || C.error;
+      let dot, html;
+      if (err) { dot = "bad"; html = `Not loading? <a data-act="switch">Switch server</a>`; }
+      else if (P.loaded && C.loaded) {
+        dot = "ok";
+        html = net.source === "cache" ? "Loaded from saved results · refreshed every 10 min" : `Loaded from Server ${net.source || net.active || 1} · saved for 10 min`;
+      } else {
+        dot = "warn";
+        html = `${!P.loaded ? "Loading posts" : "Loading comments"}, one request at a time · <a data-act="switch">Switch server</a>`;
+      }
+      el.innerHTML = `<i class="rpu-dot ${dot}"></i><span>${html}</span>`;
+    }
+
+    function updateCountdowns() {
+      panelEl.querySelectorAll(".rpu-count").forEach((el) => {
+        const st = state[el.dataset.tab];
+        el.textContent = mmss(Math.max(0, Math.ceil((st.retryAt - Date.now()) / 1000)));
+      });
+    }
+
+    function refreshChrome() {
+      if (!panelEl) return;
+      renderTabs(); renderServers(); renderNotice(); renderFooter(); updateCountdowns();
+    }
+
+    function renderStepError(tab, err) {
+      const st = state[tab];
+      const auto = err.friendly && st.retryAt > Date.now();
+      const other = (net.preferred || net.active || 1) === 1 ? 2 : 1;
+      getEl("rpu-content").insertAdjacentHTML("beforeend", `
+        <div class="rpu-error">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><b>${err.friendly ? "A lot of traffic right now." : "Couldn't load " + STEP_LABEL[tab] + "."}</b>
+            ${auto ? `<span class="rpu-loading-sub">Trying again automatically in <span class="rpu-count" data-tab="${tab}">${mmss(Math.ceil((st.retryAt - Date.now()) / 1000))}</span>.</span>` : `<span class="rpu-loading-sub">Please try again in a bit.</span>`}</span>
+          <div class="rpu-error-actions">
+            <button class="rpu-btn pri" data-act="retry" data-tab="${tab}">Try again now</button>
+            <button class="rpu-btn" data-act="switch">Switch to Server ${other}</button>
+          </div>
+        </div>`);
+    }
+
+    function skeletonHtml() {
+      return Array.from({ length: 2 }, () => `<div class="rpu-skel-card"><i class="rpu-skel" style="width:14px;height:14px"></i><i class="rpu-skel" style="height:44px"></i><div><i class="rpu-skel" style="height:9px;width:30%"></i><i class="rpu-skel" style="height:9px;width:92%"></i><i class="rpu-skel" style="height:9px;width:55%"></i></div></div>`).join("");
+    }
+
+    function showStepLoading(tab) {
+      showLoading(
+        tab === "comments" ? "Fetching comments…" : "Fetching posts…",
+        tab === "posts" ? "Comments start right after, one request at a time." : "Insights builds as soon as these finish."
+      );
+      const el = getEl("rpu-loading");
+      if (el) el.insertAdjacentHTML("beforeend", `<div class="rpu-skel-wrap">${skeletonHtml()}</div>`);
+    }
+
+    function scheduleRetry(tab, err) {
+      const st = state[tab];
+      clearTimeout(st.retryTimer);
+      if (!err.friendly || st.retries >= 3) { st.retryAt = 0; return; }
+      const wait = Math.max(5, err.retryIn || 10) * 1000;
+      st.retryAt = Date.now() + wait;
+      st.retryTimer = setTimeout(() => { st.retries++; retryStep(tab, false); }, wait);
+    }
+
+    function retryStep(tab, manual) {
+      const st = state[tab];
+      clearTimeout(st.retryTimer);
+      if (manual) { st.retries = 0; net.servers.forEach((s) => { s.until = 0; s.fails = 0; s.state = "ok"; }); }
+      st.error = null;
+      if (state.activeTab === tab) { clearContent(); showStepLoading(tab); }
+      ensureData(tab);
+    }
+
+    async function ensureData(tab) {
+      const st = state[tab];
+      if (st.loaded || st.loading) return;
+      st.loading = true; st.error = null; st.fullyLoaded = false;
+      const fetchId = ++st.fetchId;
+      refreshChrome();
       try {
-        const items = await fetchAllItems(tab, username, state.sort, state.time, (count) => {
-          if (isCurrent() && !state[tab].loaded) showLoading(`Fetching ${tab}… (${count} found)`);
-        }, (firstPage) => {
-          // First page is in — paint it now instead of waiting for the full history.
-          if (!isCurrent()) return;
-          state[tab].items = firstPage;
-          state[tab].loaded = true;
-          state[tab].page = 0;
-          renderItems();
-        }, (grown) => {
-          // Later pages stream in behind the rendered content.
-          if (!isCurrent() || !state[tab].loaded) return;
-          state[tab].items = grown;
-          renderItems();
-        });
-        if (state[tab].fetchId !== fetchId) return; // superseded mid-fetch; a newer fetch owns this tab now
-        state[tab].items = items;
-        state[tab].fullyLoaded = true;
-        if (state.activeTab === tab) renderItems();
+        const items = await fetchAllItems(tab, username, "new", "all", () => {});
+        if (st.fetchId !== fetchId) return; // superseded
+        st.items = items; st.loaded = true; st.fullyLoaded = true; st.page = 0; st.retries = 0;
         if (tab === "posts") trackPosts(items.length);
+        if (state.activeTab === tab) renderItems();
+        if (tab === "posts") ensureData("comments");   // posts are in: start comments
+        else maybeBuildInsights();                      // comments are in: build insights
       } catch (err) {
-        if (state[tab].fetchId !== fetchId) return;
-        // If later pages failed after the first already rendered, keep what's on
-        // screen — the background fetch just stops. fullyLoaded stays false so
-        // Insights won't tally a partial history.
-        if (state[tab].loaded) return;
-        if (state.activeTab === tab) {
-          hideLoading();
-          getEl("rpu-content").insertAdjacentHTML("beforeend", `
-            <div class="rpu-error">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span>${err.friendly ? esc(err.message) : `Failed to fetch ${tab}: ${esc(err.message)}`}</span>
-            </div>`);
-        }
+        if (st.fetchId !== fetchId) return;
+        st.error = err;
+        scheduleRetry(tab, err);
+        if (state.activeTab === tab) { hideLoading(); clearContent(); renderStepError(tab, err); }
       } finally {
-        if (state[tab].fetchId === fetchId) state[tab].loading = false;
+        if (st.fetchId === fetchId) st.loading = false;
+        refreshChrome();
       }
     }
 
-    async function loadInsights() {
-      // Honest waiting room: a full-history scan takes a while on active profiles,
-      // so say so and invite browsing other tabs — the scan keeps running behind them.
-      const showScanWaiting = (detail) => showLoading(
-        detail ? `Scanning subreddits… (${detail})` : "Scanning subreddits…",
-        "Takes a while on active profiles — browse Posts & Comments meanwhile, it'll be ready when you're back."
-      );
-      if (state.insights.loaded) { renderInsightsView(); return; }
-      if (state.insights.loading) { showScanWaiting(); return; } // scan already running — just re-show the waiting room
+    function maybeBuildInsights() {
+      const P = state.posts, C = state.comments, I = state.insights;
+      if (I.loaded || !P.loaded || !C.loaded) return;
+      I.data = tallySubreddits(P.items.slice(0, INSIGHT_COMMENT_LIMIT), C.items.slice(0, INSIGHT_COMMENT_LIMIT));
+      I.loaded = true;
+      if (state.activeTab === "insights") renderInsightsView();
+      refreshChrome();
+    }
+
+    // Shows a tab. Data is fetched by ensureData() in pipeline order, never by clicking:
+    // this only displays what is there (or the loading / error state for that step).
+    function loadTab(tab) {
+      state.activeTab = tab;
+      panelEl.querySelectorAll(".rpu-tab").forEach((btn) => btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab));
+      getEl("rpu-item-search").value = "";
+      getEl("rpu-pagination").style.display = "none";
       clearContent();
-
-      // Insights only looks at the user's latest 100 posts and latest 100 comments
-      // (one request each) — it no longer walks their full history. Both tabs cache
-      // exactly that newest-first page, so reuse it once loaded; otherwise fetch it.
-      const canReusePosts = state.posts.fullyLoaded;
-      const canReuseComments = state.comments.fullyLoaded;
-
-      if (canReusePosts && canReuseComments) {
-        state.insights.data = tallySubreddits(state.posts.items.slice(0, INSIGHT_COMMENT_LIMIT), state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT));
-        state.insights.loaded = true;
-        renderInsightsView();
+      if (tab === "insights") {
+        if (state.insights.loaded) renderInsightsView();
         return;
       }
-
-      state.insights.loading = true;
-      showScanWaiting();
-      try {
-        // Posts and comments are independent — fetch them concurrently instead of back-to-back.
-        const [postItems, commentItems] = await Promise.all([
-          canReusePosts
-            ? state.posts.items.slice(0, INSIGHT_COMMENT_LIMIT)
-            : fetchAllItems("posts", username, "new", "all", (count) => {
-                if (state.activeTab === "insights") showScanWaiting(`posts, ${count} found`);
-              }),
-          canReuseComments
-            ? state.comments.items.slice(0, INSIGHT_COMMENT_LIMIT)
-            : fetchComments(username, null, "new", "all", INSIGHT_COMMENT_LIMIT).then((r) => r.items),
-        ]);
-        state.insights.data = tallySubreddits(postItems, commentItems);
-        state.insights.loaded = true;
-        if (state.activeTab === "insights") renderInsightsView();
-        // else: browsed away mid-scan — the result is cached and renders on return
-      } catch (err) {
-        if (state.activeTab !== "insights") return;
-        hideLoading();
-        getEl("rpu-content").insertAdjacentHTML("beforeend", `
-          <div class="rpu-error">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span>${err.friendly ? esc(err.message) : `Failed to scan subreddits: ${esc(err.message)}`}</span>
-          </div>`);
-      } finally {
-        state.insights.loading = false;
-      }
+      const st = state[tab];
+      if (st.loaded) { st.page = 0; renderItems(); return; }
+      if (st.error) { hideLoading(); renderStepError(tab, st.error); return; }
+      showStepLoading(tab);
+      ensureData(tab); // no-op if already running
     }
 
     function renderInsightsView() {
       clearContent();
       hideLoading();
-      getEl("rpu-content").insertAdjacentHTML("beforeend", renderInsights(state.insights.data));
+      getEl("rpu-content").insertAdjacentHTML("beforeend", renderInsights(state.insights.data, state.heatMetric));
       const searchInput = getEl("rpu-insight-search");
       if (searchInput) searchInput.addEventListener("input", () => filterInsights(searchInput.value));
     }
@@ -1029,13 +1221,6 @@
       renderItems();
     }
 
-    function resetTabState(tab) {
-      state[tab].items = [];
-      state[tab].loaded = false;
-      state[tab].fullyLoaded = false;
-      state[tab].page = 0;
-    }
-
     function openPanel() {
       if (panelEl) return;
       panelEl = buildPanel(username);
@@ -1046,6 +1231,7 @@
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => {
         btn.addEventListener("click", () => {
           const tab = btn.dataset.tab;
+          if (btn.classList.contains("rpu-tab-locked")) return; // Comments wait for Posts, Insights for both
           getEl("rpu-sort-bar").style.display = tab === "insights" ? "none" : "flex";
           // Comments are always chronological — the sort buttons are meaningless there
           panelEl.querySelector(".rpu-sort-options").style.display = tab === "comments" ? "none" : "flex";
@@ -1082,19 +1268,11 @@
         reapplySortOrRefetch();
       });
 
-      // Comments are fully cached client-side and PullPush only orders by time, so a
-      // sort/time change there just re-sorts what's already loaded — no need to re-fetch.
-      // Posts still hit Reddit's real search API, where a different sort is a different
-      // result set, so those genuinely need a fresh fetch.
+      // Both tabs hold their full (single-page) result in memory and the archives only
+      // order by time, so a sort/time change just re-sorts what is already loaded.
       function reapplySortOrRefetch() {
         const tab = state.activeTab;
-        if (state[tab].loaded) {
-          state[tab].page = 0;
-          renderItems();
-          return;
-        }
-        resetTabState(tab);
-        loadTab(tab);
+        if (state[tab].loaded) { state[tab].page = 0; renderItems(); }
       }
 
       // Search within loaded posts/comments
@@ -1111,10 +1289,48 @@
       getEl("rpu-theme").addEventListener("click", () => {
         chrome.storage.local.set({ theme: effectiveTheme() === "dark" ? "light" : "dark" });
       });
+
+      // Server buttons, retry / switch actions, heatmap chips (all delegated: these
+      // elements are re-rendered as the state changes).
+      panelEl.addEventListener("click", (e) => {
+        const srv = e.target.closest("[data-server]");
+        if (srv) { net.preferred = Number(srv.dataset.server); refreshChrome(); return; }
+        const act = e.target.closest("[data-act]");
+        if (act) {
+          const stuck = [["posts", state.posts], ["comments", state.comments]].find(([, st]) => st.error);
+          if (act.dataset.act === "switch") {
+            net.preferred = (net.preferred || net.active || 1) === 1 ? 2 : 1;
+            if (stuck) retryStep(stuck[0], true);
+            refreshChrome();
+          } else if (act.dataset.act === "retry") retryStep(act.dataset.tab, true);
+          return;
+        }
+        const hm = e.target.closest("[data-hm]");
+        if (hm) {
+          state.heatMetric = hm.dataset.hm;
+          const card = getEl("rpu-heat");
+          if (card && state.insights.data) card.outerHTML = renderHeat(state.insights.data, state.heatMetric);
+        }
+      });
+      panelEl.addEventListener("mouseover", (e) => {
+        const c = e.target.closest(".rpu-hc[data-d]");
+        const out = getEl("rpu-heat-detail");
+        if (!c || !out) return;
+        out.textContent = c.dataset.out === "1"
+          ? c.dataset.d + " · before the posts and comments we load"
+          : `${c.dataset.d} · ${c.dataset.p} post${c.dataset.p === "1" ? "" : "s"}, ${c.dataset.c} comment${c.dataset.c === "1" ? "" : "s"}`;
+      });
+
+      net.listeners.add(refreshChrome);
+      ticker = setInterval(refreshChrome, 1000); // server cooldown / retry countdowns
+      refreshChrome();
       loadTab("posts");
     }
 
     function closePanel() {
+      net.listeners.delete(refreshChrome);
+      clearInterval(ticker); ticker = null;
+      [state.posts, state.comments].forEach((st) => clearTimeout(st.retryTimer));
       if (panelEl) { panelEl.remove(); panelEl = null; }
       panelOpen = false;
       const btn = getEl("rpu-reveal-btn");
