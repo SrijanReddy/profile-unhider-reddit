@@ -771,7 +771,7 @@
           <div class="rpu-avatar">${esc(String(username[0]).toUpperCase())}</div>
           <div>
             <p class="rpu-username">u/${esc(username)}</p>
-            <p class="rpu-sub-label">Profile hidden <span class="rpu-index-badge">via search index</span></p>
+            <p class="rpu-sub-label">Profile hidden</p>
           </div>
         </div>
         <div class="rpu-head-actions">
@@ -857,7 +857,7 @@
           </div>
           <div class="rpu-disclaimer-text">
             <span class="rpu-disclaimer-title">Profile Unhider</span>
-            <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from Reddit's public search index. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
+            <span class="rpu-disclaimer-body">Posts &amp; comments are sourced from public archives. Only publicly visible content is shown. <a class="rpu-disclaimer-link" href="https://profile-unhider.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy</a></span>
           </div>
         </div>`;
       if (IS_OLD_REDDIT) {
@@ -888,7 +888,7 @@
           </svg>
           Reveal activity
         </button>
-        <div class="rpu-trigger-sub">Shows posts &amp; comments from Reddit's search index</div>
+        <div class="rpu-trigger-sub">Shows posts &amp; comments from public archives</div>
       </div>`;
 
     // Old Reddit: sit directly under the sort bar rather than wherever the notice
