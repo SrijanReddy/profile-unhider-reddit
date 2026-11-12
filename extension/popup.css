@@ -1,6 +1,14 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── Tokens (from the Scaling panel; colour/radius only, no panel features) ── */
+.popup {
+  --rpu-accent: #ff4500;
+  --rpu-ok: #4ade80;
+  --rpu-muted: #a1a1aa;
+  --rpu-line: #1f1f1f;
+  --rpu-surface: #0f0f10;
+}
 body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-.popup { width: 290px; background: #0a0a0b; }
+.popup { width: 290px; background: #0a0a0b; border-radius: 20px; overflow: hidden; }
 
 .header {
   padding: 14px 16px; border-bottom: 1px solid #1f1f1f;
@@ -16,60 +24,80 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 }
 .logo-name { font-size: 13px; font-weight: 600; color: #fafafa; display: block; }
 .logo-sub { font-size: 10px; color: #a1a1aa; }
-.toggle {
-  width: 38px; height: 21px; background: #ff4500; border-radius: 11px;
-  position: relative; cursor: pointer; border: none; flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(255,69,0,0.4); transition: background 0.2s, box-shadow 0.2s;
+/* ── Enable toggle: a labelled On/Off pill.
+   The checkbox itself is the visible pill track (appearance:none) — a real
+   control, never opacity:0. Knob + label are a pointer-events:none overlay
+   driven by :checked. ── */
+.toggle-pill { position: relative; display: inline-block; flex-shrink: 0; cursor: pointer; }
+.toggle-pill input {
+  appearance: none; -webkit-appearance: none;
+  width: 60px; height: 28px; margin: 0;
+  background: #27272a; border: none; border-radius: 14px;
+  box-shadow: none; transition: background 0.2s; cursor: pointer;
+  display: block;
 }
-.toggle.off { background: #27272a; box-shadow: none; }
+.toggle-pill input:checked { background: var(--rpu-accent); box-shadow: 0 0 10px rgba(255,69,0,0.4); }
+.toggle-pill input:focus-visible { outline: 2px solid var(--rpu-accent); outline-offset: 2px; }
 .toggle-knob {
-  position: absolute; top: 2.5px; right: 2.5px;
-  width: 16px; height: 16px; background: white; border-radius: 50%; transition: right 0.2s;
+  position: absolute; top: 3px; left: 3px;
+  width: 22px; height: 22px; background: white; border-radius: 50%;
+  transition: left 0.2s; pointer-events: none;
 }
-.toggle.off .toggle-knob { right: 19.5px; }
+.toggle-pill input:checked ~ .toggle-knob { left: 35px; }
+.toggle-state {
+  position: absolute; top: 0; right: 8px; height: 28px;
+  display: flex; align-items: center;
+  font-size: 10px; font-weight: 700; color: #ffffff; pointer-events: none;
+}
+.toggle-pill input:checked ~ .toggle-state { right: auto; left: 9px; }
 
 .status-box {
-  margin: 12px; background: #0f0f10; border: 1px solid #1f1f1f;
-  border-radius: 10px; padding: 11px 13px;
-  display: flex; align-items: center; gap: 11px;
+  margin: 14px 12px; background: var(--rpu-surface); border: 1px solid var(--rpu-line);
+  border-radius: 14px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
   position: relative; overflow: hidden; transition: border-color 0.3s, box-shadow 0.3s;
 }
-.status-box.detected { border-color: rgba(255,69,0,0.3); box-shadow: 0 0 16px rgba(255,69,0,0.06); }
+/* Hidden detected = green light (success), not yellow/orange. Orange stays
+   on the logo, stat numbers and Support only. */
+.status-box.detected { border-color: rgba(74,222,128,0.45); box-shadow: 0 0 18px rgba(74,222,128,0.12); }
 .status-glow {
-  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
   background: linear-gradient(90deg, transparent, rgba(255,69,0,0.5), transparent);
 }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #3f3f46; transition: background 0.3s, box-shadow 0.3s; }
-.status-dot.active { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
-.status-dot.detected { background: #ff4500; box-shadow: 0 0 8px rgba(255,69,0,0.7); }
+.status-box.detected .status-glow {
+  background: linear-gradient(90deg, transparent, var(--rpu-ok), transparent);
+}
+.status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #3f3f46; transition: background 0.3s, box-shadow 0.3s; }
+.status-dot.active { background: var(--rpu-muted); }
+.status-dot.detected { background: var(--rpu-ok); box-shadow: 0 0 8px rgba(74,222,128,0.8); }
 .status-dot.idle { background: #3f3f46; }
 .status-dot.disabled { background: #3f3f46; }
-.status-text strong { font-size: 12px; font-weight: 500; color: #fafafa; display: block; margin-bottom: 1px; }
+.status-text strong { font-size: 17px; font-weight: 700; color: #fafafa; display: block; margin-bottom: 2px; }
 .status-text span { font-size: 11px; color: #a1a1aa; }
 
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 12px 8px; }
-.stat {
-  background: #0f0f10; border: 1px solid #1f1f1f;
-  border-radius: 10px; padding: 12px 10px; text-align: center;
-  position: relative; overflow: hidden;
+/* ── Stats: one slim divided row, not two big tiles. Numbers stay 22px orange;
+   the row itself is quiet so the status box stays the focus. ── */
+.stats {
+  display: flex; align-items: center;
+  background: var(--rpu-surface); border: 1px solid var(--rpu-line);
+  border-radius: 14px; padding: 12px 14px; margin: 0 12px 8px;
 }
-.stat-glow {
-  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 60%; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,69,0,0.4), transparent);
-}
-.stat-num { font-size: 22px; font-weight: 700; color: #ff4500; line-height: 1; margin-bottom: 4px; text-shadow: 0 0 12px rgba(255,69,0,0.4); }
-.stat-label { font-size: 10px; color: #a1a1aa; letter-spacing: 0.05em; text-transform: uppercase; }
+.stat-item { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.stat-item:last-child { justify-content: flex-end; text-align: right; }
+.stat-icon { flex-shrink: 0; }
+.stat-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.stat-num { font-size: 22px; font-weight: 700; color: var(--rpu-accent); line-height: 1; text-shadow: 0 0 12px rgba(255,69,0,0.4); }
+.stat-label { font-size: 10px; color: #a1a1aa; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.stat-divider { width: 1px; align-self: stretch; background: var(--rpu-line); margin: 0 14px; flex-shrink: 0; }
 
-.reset-wrap { margin: 0 12px 12px; }
-.reset-btn {
-  width: 100%; padding: 8px; background: transparent;
-  border: 1px solid #1f1f1f; border-radius: 8px;
-  font-size: 11px; color: #a1a1aa; cursor: pointer; font-family: inherit;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  transition: border-color 0.15s, color 0.15s;
+.reset-wrap { margin: 0 12px 12px; text-align: center; }
+.reset-link {
+  background: none; border: none; padding: 4px 6px;
+  font-size: 11px; color: #71717a; cursor: pointer; font-family: inherit;
+  transition: color 0.15s;
 }
-.reset-btn:hover { border-color: #ff4500; color: #ff4500; }
+.reset-link:hover { color: #a1a1aa; text-decoration: underline; }
+.reset-link.armed { color: var(--rpu-accent); font-weight: 700; text-decoration: underline; }
 
 .footer {
   border-top: 1px solid #1f1f1f; padding: 10px 16px;
@@ -77,22 +105,24 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
   background: linear-gradient(0deg, #0d0a09 0%, #0a0a0b 100%);
 }
 .site-link { font-size: 11px; color: #71717a; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
-.site-link:hover { color: #ff4500; }
+.site-link:hover { color: var(--rpu-accent); }
 .support-link {
-  font-size: 11px; color: #ff4500; background: none; border: none; cursor: pointer;
-  display: flex; align-items: center; gap: 4px; padding: 0;
-  font-family: inherit; font-weight: 700; transition: color 0.15s;
+  font-size: 11px; color: var(--rpu-accent); background: rgba(255,69,0,0.08);
+  border: 1px solid rgba(255,69,0,0.5); border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; gap: 4px; padding: 10px 14px;
+  font-family: inherit; font-weight: 700; transition: color 0.15s, background 0.15s;
 }
-.support-link:hover { color: #ff6a2b; }
-.version { font-size: 10px; color: #52525b; }
+.support-link:hover { color: #ff6a2b; background: rgba(255,69,0,0.16); }
+.version { font-size: 10px; color: #a1a1aa; background: #1f1f1f; border-radius: 999px; padding: 3px 8px; }
 
 .refresh-icon-btn {
-  width: 26px; height: 26px; border-radius: 7px;
+  width: 44px; height: 44px; border-radius: 12px;
   background: rgba(255,69,0,0.08); border: 1px solid rgba(255,69,0,0.25);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0; color: #ff4500;
+  cursor: pointer; flex-shrink: 0; color: var(--rpu-accent);
   transition: background 0.15s, transform 0.3s;
 }
+.refresh-icon-btn svg { width: 18px; height: 18px; }
 .refresh-icon-btn:hover { background: rgba(255,69,0,0.18); transform: rotate(180deg); }
 
 /* ── What's new view ── */
@@ -140,18 +170,22 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 .theme-btn:hover { border-color: #ff4500; color: #ff4500; }
 
 /* ── Light theme ── */
+html[data-theme="light"] .popup { --rpu-ok: #46d160; --rpu-muted: #71717a; --rpu-line: #e4e4e7; --rpu-surface: #fafafa; }
 html[data-theme="light"] body, html[data-theme="light"] .popup { background: #ffffff; }
 html[data-theme="light"] .header { background: linear-gradient(180deg, #fff3ee 0%, #ffffff 100%); border-bottom-color: #e4e4e7; }
 html[data-theme="light"] .logo-name, html[data-theme="light"] .status-text strong { color: #18181b; }
 html[data-theme="light"] .logo-sub, html[data-theme="light"] .status-text span, html[data-theme="light"] .stat-label { color: #71717a; }
-html[data-theme="light"] .status-box, html[data-theme="light"] .stat { background: #fafafa; border-color: #e4e4e7; }
-html[data-theme="light"] .toggle.off { background: #d4d4d8; }
-html[data-theme="light"] .reset-btn, html[data-theme="light"] .theme-btn { border-color: #e4e4e7; color: #71717a; }
-html[data-theme="light"] .reset-btn:hover, html[data-theme="light"] .theme-btn:hover { border-color: #ff4500; color: #ff4500; }
+html[data-theme="light"] .status-box, html[data-theme="light"] .stats { background: #fafafa; border-color: #e4e4e7; }
+html[data-theme="light"] .toggle-pill input:not(:checked) { background: #d4d4d8; }
+html[data-theme="light"] .reset-link, html[data-theme="light"] .theme-btn { border-color: #e4e4e7; color: #71717a; }
+html[data-theme="light"] .reset-link:hover, html[data-theme="light"] .theme-btn:hover { border-color: #ff4500; color: #ff4500; }
 html[data-theme="light"] .footer { border-top-color: #e4e4e7; background: #ffffff; }
 html[data-theme="light"] .site-link { color: #71717a; }
-html[data-theme="light"] .version { color: #a1a1aa; }
+html[data-theme="light"] .version { color: #71717a; background: #f4f4f5; }
 html[data-theme="light"] .status-dot.idle, html[data-theme="light"] .status-dot.disabled { background: #a1a1aa; }
+html[data-theme="light"] .status-dot.active { background: #a1a1aa; }
+html[data-theme="light"] .status-dot.detected { background: #46d160; box-shadow: 0 0 8px rgba(70,209,96,0.6); }
+html[data-theme="light"] .status-box.detected { border-color: rgba(70,209,96,0.5); box-shadow: 0 0 18px rgba(70,209,96,0.12); }
 html[data-theme="light"] .wn-title { color: #18181b; }
 html[data-theme="light"] .wn-item { background: #fafafa; border-color: #e4e4e7; }
 html[data-theme="light"] .wn-item-text strong { color: #18181b; }

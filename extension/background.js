@@ -1,3 +1,22 @@
+/* ── Uninstall feedback ──
+   Open the leaving-only goodbye box when the extension is removed.
+   Set on every background start, not only on install: Firefox does not
+   persist the URL the way Chrome does, and re-setting it is harmless.
+   Chrome opens it on removal; Firefox does too unless the extension was
+   disabled first; Safari ignores the call. No new permission needed.
+   The version rides in the hash query (?v=) so the site can tell which
+   release someone left on; app.js reads it from either the hash or the
+   query string. */
+function refreshUninstallUrl() {
+  if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.setUninstallURL) return;
+  var url = "https://profile-unhider.vercel.app/#goodbye?v=" + chrome.runtime.getManifest().version;
+  try {
+    var result = chrome.runtime.setUninstallURL(url);
+    if (result && typeof result.catch === "function") result.catch(function () {});
+  } catch (e) { /* older runtimes / Safari: no-op */ }
+}
+refreshUninstallUrl();
+
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
     chrome.tabs.create({ url: "https://profile-unhider.vercel.app/welcome" });
