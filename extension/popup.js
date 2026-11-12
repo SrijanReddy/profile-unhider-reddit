@@ -105,13 +105,21 @@
     defaultView.style.display = "";
   });
 
+  /* ── Enable toggle: a labelled On/Off pill backed by a real checkbox.
+     toggle.checked is the source of truth; the label text follows it. ── */
+  const toggleLabel = document.getElementById("toggle-label");
+  function setToggleUI(enabled) {
+    toggle.checked = enabled;
+    if (toggleLabel) toggleLabel.textContent = enabled ? "On" : "Off";
+  }
+
   /* ── Load state ── */
   chrome.storage.local.get(["profilesRevealed", "postsSurfaced", "enabled"], (res) => {
     statProfiles.textContent = res.profilesRevealed || 0;
     statPosts.textContent = res.postsSurfaced || 0;
     const enabled = res.enabled !== false;
+    setToggleUI(enabled);
     if (!enabled) {
-      toggle.classList.add("off");
       setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
     } else {
       updatePageStatus();
@@ -119,17 +127,15 @@
   });
 
   /* ── Toggle ── */
-  toggle.addEventListener("click", () => {
-    chrome.storage.local.get(["enabled"], (res) => {
-      const nowEnabled = res.enabled === false;
-      chrome.storage.local.set({ enabled: nowEnabled });
-      toggle.classList.toggle("off", !nowEnabled);
-      if (!nowEnabled) {
-        setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
-      } else {
-        updatePageStatus();
-      }
-    });
+  toggle.addEventListener("change", () => {
+    const nowEnabled = toggle.checked;
+    chrome.storage.local.set({ enabled: nowEnabled });
+    setToggleUI(nowEnabled);
+    if (!nowEnabled) {
+      setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
+    } else {
+      updatePageStatus();
+    }
   });
 
   /* ── Refresh page ── */
@@ -142,8 +148,26 @@
     });
   });
 
-  /* ── Reset stats ── */
+  /* ── Reset stats: two taps. First tap arms (3s window), second confirms.
+     Reset is a quiet text link now, so an accidental single tap must not
+     wipe the counts. ── */
+  var resetArmed = false;
+  var resetArmTimer = null;
+  function disarmReset() {
+    resetArmed = false;
+    resetBtn.classList.remove("armed");
+    resetBtn.textContent = "Reset stats";
+    if (resetArmTimer) { clearTimeout(resetArmTimer); resetArmTimer = null; }
+  }
   resetBtn.addEventListener("click", () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      resetBtn.classList.add("armed");
+      resetBtn.textContent = "Tap again to confirm reset";
+      resetArmTimer = setTimeout(disarmReset, 3000);
+      return;
+    }
+    disarmReset();
     chrome.storage.local.set({ profilesRevealed: 0, postsSurfaced: 0 }, () => {
       statProfiles.textContent = "0";
       statPosts.textContent = "0";

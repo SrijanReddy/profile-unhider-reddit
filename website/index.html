@@ -328,6 +328,44 @@
     </div>
   </div>
 
+  <!-- Goodbye box: leaving-only. Opens only at #goodbye (the URL the
+       extension registers as its uninstall URL). Normal visitors never see
+       it; the #support modal above is untouched. Submissions go to the same
+       Trello board via the same FormSubmit endpoint as support, tagged
+       [Uninstall]. -->
+  <div class="modal-backdrop" id="goodbye-modal" role="dialog" aria-modal="true" aria-labelledby="goodbye-title">
+    <div class="modal">
+      <button class="modal-close" id="goodbye-close" aria-label="Close">✕</button>
+      <h3 id="goodbye-title">Sorry to see you go</h3>
+      <p class="lede">Profile Unhider is built by me and my friend in our free time, no company behind it, just two people trying to make this work. If something broke, tell us and we will try to fix it.</p>
+      <form id="goodbye-form" novalidate>
+        <div class="field">
+          <span class="field-label" id="goodbye-reason-label">Why did you remove it?</span>
+          <div class="chip-row" id="goodbye-reasons" role="group" aria-labelledby="goodbye-reason-label">
+            <button type="button" class="chip" data-reason="Didn't work">Didn't work</button>
+            <button type="button" class="chip" data-reason="Too slow / buggy">Too slow / buggy</button>
+            <button type="button" class="chip" data-reason="Found an alternative">Found an alternative</button>
+            <button type="button" class="chip" data-reason="Privacy concern">Privacy concern</button>
+            <button type="button" class="chip" data-reason="Didn't need it anymore">Didn't need it anymore</button>
+            <button type="button" class="chip" data-reason="Other">Other</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="goodbye-message">What's happening? <span class="optional" id="goodbye-message-optional">(optional)</span></label>
+          <textarea id="goodbye-message" name="message" placeholder="e.g. The panel showed nothing on profiles I checked…"></textarea>
+        </div>
+        <div class="field">
+          <label for="goodbye-email">Email <span class="optional">(optional, only if you want a reply)</span></label>
+          <input type="email" id="goodbye-email" name="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <input type="text" name="_honey" id="goodbye-honey" style="display:none" tabindex="-1" autocomplete="off">
+        <p class="form-error" id="goodbye-error" role="alert"></p>
+        <button class="btn btn-modal-submit" type="submit" id="goodbye-submit">Send feedback</button>
+        <a class="btn btn-reinstall" id="goodbye-reinstall" href="https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp">Reinstall Profile Unhider</a>
+      </form>
+    </div>
+  </div>
+
   <script src="app.js" defer></script>
 </body>
 </html>

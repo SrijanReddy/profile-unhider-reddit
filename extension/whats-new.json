@@ -58,5 +58,30 @@
         "desc": "Reuses your already-loaded data, and the scan keeps running in the background while you browse other tabs"
       }
     ]
+  },
+  "3.5.0": {
+    "title": "What's new",
+    "items": [
+      {
+        "icon": "📜",
+        "title": "Works on old Reddit too",
+        "desc": "Now supports old.reddit.com"
+      },
+      {
+        "icon": "🔥",
+        "title": "Activity heatmap",
+        "desc": "See 26 weeks of activity at a glance in Insights"
+      },
+      {
+        "icon": "🔄",
+        "title": "More reliable loading",
+        "desc": "Switches servers automatically if one is slow or down"
+      },
+      {
+        "icon": "🎨",
+        "title": "Fresh new popup",
+        "desc": "Cleaner look, same buttons"
+      }
+    ]
   }
 }
