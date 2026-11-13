@@ -12,6 +12,25 @@
   const refreshBtn = document.getElementById("refresh-btn");
   const supportLink = document.getElementById("support-link");
 
+  /* ── Compact stat counts: under 1,000 exact, then 1.2k / 10k / 100k / 1M.
+     The raw count is written straight into a 20px number today, so 1000000
+     would crowd its half of the stat row. Full number stays on hover. ── */
+  function formatCount(n) {
+    n = Number(n) || 0;
+    if (n < 1000) return String(n);
+    if (n < 1000000) {
+      const k = n / 1000;
+      return (k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.floor(k)) + "k";
+    }
+    const m = n / 1000000;
+    return (m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.floor(m)) + "M";
+  }
+  function setStat(el, n) {
+    n = Number(n) || 0;
+    el.textContent = formatCount(n);
+    el.title = n.toLocaleString("en-US");
+  }
+
   /* ── Support: deep-link to the website's support form ── */
   if (supportLink) {
     supportLink.addEventListener("click", () => {
@@ -115,8 +134,8 @@
 
   /* ── Load state ── */
   chrome.storage.local.get(["profilesRevealed", "postsSurfaced", "enabled"], (res) => {
-    statProfiles.textContent = res.profilesRevealed || 0;
-    statPosts.textContent = res.postsSurfaced || 0;
+    setStat(statProfiles, res.profilesRevealed);
+    setStat(statPosts, res.postsSurfaced);
     const enabled = res.enabled !== false;
     setToggleUI(enabled);
     if (!enabled) {
@@ -169,8 +188,8 @@
     }
     disarmReset();
     chrome.storage.local.set({ profilesRevealed: 0, postsSurfaced: 0 }, () => {
-      statProfiles.textContent = "0";
-      statPosts.textContent = "0";
+      setStat(statProfiles, 0);
+      setStat(statPosts, 0);
     });
   });
 
