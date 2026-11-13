@@ -17,6 +17,35 @@
   const _sessionRevealed = new Set();
   let _rateNudgeShown = false;
 
+  /* ── Stale-tab guard ──
+     Reloading or updating the extension leaves an already-injected content
+     script running in open tabs, but its chrome.* APIs go away
+     (chrome.storage becomes undefined, so reading .local throws
+     "Cannot read properties of undefined"). Every storage call goes through
+     these helpers and fails silent in that state instead of throwing. */
+  function storageAlive() {
+    try {
+      return typeof chrome !== "undefined" && chrome.storage && chrome.storage.local;
+    } catch (e) {
+      return false;
+    }
+  }
+  function storageGet(keys, cb) {
+    if (!storageAlive()) return;
+    try {
+      chrome.storage.local.get(keys, (res) => {
+        if (chrome.runtime && chrome.runtime.lastError) return;
+        cb(res || {});
+      });
+    } catch (e) { /* stale context: ignore */ }
+  }
+  function storageSet(obj) {
+    if (!storageAlive()) return;
+    try {
+      chrome.storage.local.set(obj);
+    } catch (e) { /* stale context: ignore */ }
+  }
+
   /* ── theme ──
      Default follows the OS (prefers-color-scheme). The popup's and the panel's
      sun/moon buttons store an explicit "light"/"dark" in chrome.storage, which sets
@@ -38,10 +67,12 @@
     const btn = document.getElementById("rpu-theme");
     if (btn) btn.innerHTML = themeIcon();
   }
-  chrome.storage.local.get(["theme"], (res) => applyTheme(res.theme));
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.theme) applyTheme(changes.theme.newValue);
-  });
+  storageGet(["theme"], (res) => applyTheme(res.theme));
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.theme) applyTheme(changes.theme.newValue);
+    });
+  }
 
   /* ── helpers ── */
   function esc(str) {
@@ -159,10 +190,10 @@
     if (IS_OLD_REDDIT) return;
 
     // Get cycling message index from storage
-    chrome.storage.local.get(["fallbackMsgIndex"], (res) => {
+    storageGet(["fallbackMsgIndex"], (res) => {
       const idx = (res.fallbackMsgIndex || 0) % FALLBACK_MSGS.length;
       const msg = FALLBACK_MSGS[idx];
-      chrome.storage.local.set({ fallbackMsgIndex: idx + 1 });
+      storageSet({ fallbackMsgIndex: idx + 1 });
 
       // Find injection point — same as normal injection
       const anchor = findHiddenMessageEl();
@@ -197,14 +228,14 @@
     // Per-session dedup — don't count same profile twice in same session
     if (_sessionRevealed.has(username)) return;
     _sessionRevealed.add(username);
-    chrome.storage.local.get(["profilesRevealed"], (res) => {
-      chrome.storage.local.set({ profilesRevealed: (res.profilesRevealed || 0) + 1 });
+    storageGet(["profilesRevealed"], (res) => {
+      storageSet({ profilesRevealed: (res.profilesRevealed || 0) + 1 });
     });
   }
 
   function trackPosts(count) {
-    chrome.storage.local.get(["postsSurfaced"], (res) => {
-      chrome.storage.local.set({ postsSurfaced: (res.postsSurfaced || 0) + count });
+    storageGet(["postsSurfaced"], (res) => {
+      storageSet({ postsSurfaced: (res.postsSurfaced || 0) + count });
     });
   }
 
@@ -214,7 +245,7 @@
 
   function maybeShowRatingNudge() {
     if (_rateNudgeShown) return;
-    chrome.storage.local.get(
+    storageGet(
       ["profilesRevealed", "ratingNudgeDismissed", "ratingNudgeSnoozedUntil"],
       (res) => {
         if ((res.profilesRevealed || 0) < RATE_NUDGE_MIN_REVEALS) return;
@@ -247,16 +278,16 @@
     if (head) head.after(nudge);
     else panel.prepend(nudge);
     document.getElementById("rpu-rate-yes").addEventListener("click", () => {
-      chrome.storage.local.set({ ratingNudgeDismissed: true });
+      storageSet({ ratingNudgeDismissed: true });
       window.open(reviewUrl, "_blank", "noopener");
       nudge.remove();
     });
     document.getElementById("rpu-rate-later").addEventListener("click", () => {
-      chrome.storage.local.set({ ratingNudgeSnoozedUntil: Date.now() + RATE_NUDGE_SNOOZE_MS });
+      storageSet({ ratingNudgeSnoozedUntil: Date.now() + RATE_NUDGE_SNOOZE_MS });
       nudge.remove();
     });
     document.getElementById("rpu-rate-never").addEventListener("click", () => {
-      chrome.storage.local.set({ ratingNudgeDismissed: true });
+      storageSet({ ratingNudgeDismissed: true });
       nudge.remove();
     });
   }
@@ -1312,7 +1343,7 @@
 
       getEl("rpu-close").addEventListener("click", closePanel);
       getEl("rpu-theme").addEventListener("click", () => {
-        chrome.storage.local.set({ theme: effectiveTheme() === "dark" ? "light" : "dark" });
+        storageSet({ theme: effectiveTheme() === "dark" ? "light" : "dark" });
       });
 
       // Server buttons, retry / switch actions, heatmap chips (all delegated: these
@@ -1424,9 +1455,11 @@
 })();
 
 /* ── Message listener for popup status queries ── */
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "getStatus") {
-    sendResponse({ injected: window.__rpuInjected === true });
-  }
-  return true;
-});
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === "getStatus") {
+      sendResponse({ injected: window.__rpuInjected === true });
+    }
+    return true;
+  });
+}
