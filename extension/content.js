@@ -837,8 +837,17 @@
   }
 
   /* ── inject ── */
+  // Reddit is a single-page app: it can drop our Reveal box / panel and change the URL,
+  // after which we inject again. The previous copy's code (and its once-a-second timer)
+  // is still alive, so exactly one copy may be live at a time, and data already loaded
+  // for the same user is kept so the fresh copy has nothing to refetch.
+  let liveInstance = null;
+  const loadedData = { user: null, posts: null, comments: null };
+
   function inject(username) {
     if (document.getElementById("rpu-trigger-wrap")) return;
+    if (liveInstance) liveInstance.destroy(); // stop the previous copy before creating a new one
+    let destroyed = false;
 
     window.__rpuInjected = true;
     trackProfile(username);
@@ -903,18 +912,32 @@
     let panelOpen = false;
     const PAGE_SIZE = 25;
     const INSIGHT_COMMENT_LIMIT = 100;
+    const step = (items) => ({ items: items || [], loaded: !!items, fullyLoaded: !!items, loading: false, page: 0, fetchId: 0, error: null, retries: 0, retryAt: 0, retryTimer: null });
+    const kept = loadedData.user === username ? loadedData : { posts: null, comments: null };
     const state = {
       activeTab: "posts",
       sort: "new",
       time: "all",
       heatMetric: "all",
-      posts: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0, error: null, retries: 0, retryAt: 0, retryTimer: null },
-      comments: { items: [], loaded: false, fullyLoaded: false, loading: false, page: 0, fetchId: 0, error: null, retries: 0, retryAt: 0, retryTimer: null },
+      posts: step(kept.posts),
+      comments: step(kept.comments),
       insights: { loaded: false, loading: false, data: null },
     };
     let ticker = null;
 
-    const getEl = (id) => document.getElementById(id);
+    // Elements are looked up inside THIS copy's own panel / Reveal box, never page-wide,
+    // so a stray copy can't read or write another copy's elements.
+    const getEl = (id) => (panelEl && panelEl.querySelector("#" + id)) || triggerWrap.querySelector("#" + id);
+
+    liveInstance = {
+      destroy() {
+        destroyed = true;
+        clearInterval(ticker); ticker = null;
+        [state.posts, state.comments].forEach((st) => clearTimeout(st.retryTimer));
+        net.listeners.delete(refreshChrome);
+        if (panelEl) { panelEl.remove(); panelEl = null; }
+      },
+    };
 
     function showLoading(msg, sub) {
       const el = getEl("rpu-loading");
@@ -1092,6 +1115,7 @@
 
     function refreshChrome() {
       if (!panelEl) return;
+      if (!panelEl.isConnected) { closePanel(); return; } // Reddit removed our panel: stop ticking
       renderTabs(); renderServers(); renderNotice(); renderFooter(); updateCountdowns();
     }
 
@@ -1150,14 +1174,15 @@
       refreshChrome();
       try {
         const items = await fetchAllItems(tab, username, "new", "all", () => {});
-        if (st.fetchId !== fetchId) return; // superseded
+        if (st.fetchId !== fetchId || destroyed) return; // superseded, or this copy was replaced
+        loadedData.user = username; loadedData[tab] = items;
         st.items = items; st.loaded = true; st.fullyLoaded = true; st.page = 0; st.retries = 0;
         if (tab === "posts") trackPosts(items.length);
         if (state.activeTab === tab) renderItems();
         if (tab === "posts") ensureData("comments");   // posts are in: start comments
         else maybeBuildInsights();                      // comments are in: build insights
       } catch (err) {
-        if (st.fetchId !== fetchId) return;
+        if (st.fetchId !== fetchId || destroyed) return;
         st.error = err;
         scheduleRetry(tab, err);
         if (state.activeTab === tab) { hideLoading(); clearContent(); renderStepError(tab, err); }
@@ -1325,6 +1350,16 @@
       ticker = setInterval(refreshChrome, 1000); // server cooldown / retry countdowns
       refreshChrome();
       loadTab("posts");
+      startPipeline();
+    }
+
+    // Starts whichever step is next. Safe to call any time: ensureData ignores a step
+    // that is loaded or already running, and a step in an error state keeps its retry card.
+    function startPipeline() {
+      const P = state.posts, C = state.comments;
+      if (!P.loaded) ensureData("posts");
+      else if (!C.loaded && !C.loading && !C.error) ensureData("comments");
+      maybeBuildInsights();
     }
 
     function closePanel() {
