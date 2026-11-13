@@ -101,10 +101,11 @@ body { width: 290px; background: #0a0a0b; font-family: -apple-system, BlinkMacSy
 
 .footer {
   border-top: 1px solid #1f1f1f; padding: 10px 16px;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
   background: linear-gradient(0deg, #0d0a09 0%, #0a0a0b 100%);
 }
-.site-link { font-size: 11px; color: #71717a; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; }
+.footer-row { display: flex; align-items: center; gap: 8px; }
+.site-link { font-size: 11px; color: #71717a; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s; white-space: nowrap; }
 .site-link:hover { color: var(--rpu-accent); }
 .support-link {
   font-size: 11px; color: var(--rpu-accent); background: rgba(255,69,0,0.08);
