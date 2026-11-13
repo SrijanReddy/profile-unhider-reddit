@@ -12,6 +12,25 @@
   const refreshBtn = document.getElementById("refresh-btn");
   const supportLink = document.getElementById("support-link");
 
+  /* ── Compact stat counts: under 1,000 exact, then 1.2k / 10k / 100k / 1M.
+     The raw count is written straight into a 20px number today, so 1000000
+     would crowd its half of the stat row. Full number stays on hover. ── */
+  function formatCount(n) {
+    n = Number(n) || 0;
+    if (n < 1000) return String(n);
+    if (n < 1000000) {
+      const k = n / 1000;
+      return (k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.floor(k)) + "k";
+    }
+    const m = n / 1000000;
+    return (m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.floor(m)) + "M";
+  }
+  function setStat(el, n) {
+    n = Number(n) || 0;
+    el.textContent = formatCount(n);
+    el.title = n.toLocaleString("en-US");
+  }
+
   /* ── Support: deep-link to the website's support form ── */
   if (supportLink) {
     supportLink.addEventListener("click", () => {
@@ -25,6 +44,23 @@
   const wnTitle = document.getElementById("wn-title");
   const wnItems = document.getElementById("wn-items");
   const wnGotIt = document.getElementById("wn-got-it");
+
+  /* ── theme (shared with the on-page panel via chrome.storage "theme") ──
+     The popup has always been dark, so it stays dark until the user picks light. */
+  const themeBtn = document.getElementById("theme-btn");
+  const SUN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  function applyPopupTheme(t) {
+    const light = t === "light";
+    document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
+    themeBtn.innerHTML = light ? MOON : SUN; // icon shows where a click takes you
+  }
+  chrome.storage.local.get(["theme"], (res) => applyPopupTheme(res.theme));
+  themeBtn.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    chrome.storage.local.set({ theme: next });
+    applyPopupTheme(next);
+  });
 
   document.getElementById("version-label").textContent = "v" + chrome.runtime.getManifest().version;
 
@@ -88,13 +124,21 @@
     defaultView.style.display = "";
   });
 
+  /* ── Enable toggle: a labelled On/Off pill backed by a real checkbox.
+     toggle.checked is the source of truth; the label text follows it. ── */
+  const toggleLabel = document.getElementById("toggle-label");
+  function setToggleUI(enabled) {
+    toggle.checked = enabled;
+    if (toggleLabel) toggleLabel.textContent = enabled ? "On" : "Off";
+  }
+
   /* ── Load state ── */
   chrome.storage.local.get(["profilesRevealed", "postsSurfaced", "enabled"], (res) => {
-    statProfiles.textContent = res.profilesRevealed || 0;
-    statPosts.textContent = res.postsSurfaced || 0;
+    setStat(statProfiles, res.profilesRevealed);
+    setStat(statPosts, res.postsSurfaced);
     const enabled = res.enabled !== false;
+    setToggleUI(enabled);
     if (!enabled) {
-      toggle.classList.add("off");
       setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
     } else {
       updatePageStatus();
@@ -102,17 +146,15 @@
   });
 
   /* ── Toggle ── */
-  toggle.addEventListener("click", () => {
-    chrome.storage.local.get(["enabled"], (res) => {
-      const nowEnabled = res.enabled === false;
-      chrome.storage.local.set({ enabled: nowEnabled });
-      toggle.classList.toggle("off", !nowEnabled);
-      if (!nowEnabled) {
-        setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
-      } else {
-        updatePageStatus();
-      }
-    });
+  toggle.addEventListener("change", () => {
+    const nowEnabled = toggle.checked;
+    chrome.storage.local.set({ enabled: nowEnabled });
+    setToggleUI(nowEnabled);
+    if (!nowEnabled) {
+      setStatus("disabled", "", "Extension disabled", "Click toggle to re-enable");
+    } else {
+      updatePageStatus();
+    }
   });
 
   /* ── Refresh page ── */
@@ -125,11 +167,29 @@
     });
   });
 
-  /* ── Reset stats ── */
+  /* ── Reset stats: two taps. First tap arms (3s window), second confirms.
+     Reset is a quiet text link now, so an accidental single tap must not
+     wipe the counts. ── */
+  var resetArmed = false;
+  var resetArmTimer = null;
+  function disarmReset() {
+    resetArmed = false;
+    resetBtn.classList.remove("armed");
+    resetBtn.textContent = "Reset stats";
+    if (resetArmTimer) { clearTimeout(resetArmTimer); resetArmTimer = null; }
+  }
   resetBtn.addEventListener("click", () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      resetBtn.classList.add("armed");
+      resetBtn.textContent = "Tap again to confirm reset";
+      resetArmTimer = setTimeout(disarmReset, 3000);
+      return;
+    }
+    disarmReset();
     chrome.storage.local.set({ profilesRevealed: 0, postsSurfaced: 0 }, () => {
-      statProfiles.textContent = "0";
-      statPosts.textContent = "0";
+      setStat(statProfiles, 0);
+      setStat(statPosts, 0);
     });
   });
 

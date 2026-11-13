@@ -106,4 +106,6 @@ function deepObserve(root) {
   return obs;
 }
 
-deepObserve(document.body);
+// Hover cards are a feature of the redesign (shreddit web components). Old Reddit
+// has none, and its pages can't fetch www.reddit.com cross-origin anyway.
+if (location.hostname !== 'old.reddit.com') deepObserve(document.body);
