@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Privacy Policy — Profile Unhider</title>
-  <meta name="description" content="Profile Unhider collects no personal data, stores nothing, and tracks nothing.">
+  <meta name="description" content="Profile Unhider collects no personal data and tracks nothing. Settings and counters are stored only on your device.">
   <link rel="canonical" href="https://profile-unhider.vercel.app/privacy/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Profile Unhider">
   <meta property="og:title" content="Privacy Policy — Profile Unhider">
-  <meta property="og:description" content="Profile Unhider collects no personal data, stores nothing, and tracks nothing.">
+  <meta property="og:description" content="Profile Unhider collects no personal data and tracks nothing. Settings and counters are stored only on your device.">
   <meta property="og:url" content="https://profile-unhider.vercel.app/privacy/">
   <meta property="og:image" content="https://profile-unhider.vercel.app/og-image%20preview.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Privacy Policy — Profile Unhider">
-  <meta name="twitter:description" content="Profile Unhider collects no personal data, stores nothing, and tracks nothing.">
+  <meta name="twitter:description" content="Profile Unhider collects no personal data and tracks nothing. Settings and counters are stored only on your device.">
   <meta name="twitter:image" content="https://profile-unhider.vercel.app/og-image%20preview.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23ff6942'/%3E%3Ccircle cx='16' cy='13' r='5' fill='white'/%3E%3Cpath d='M8 23c2.2-3 5.1-4.5 8-4.5s5.8 1.5 8 4.5' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,16 +51,16 @@
   <main class="wrap">
     <article class="prose">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: March 2026</p>
+      <p class="updated">Last updated: November 2026</p>
 
       <h2>Short version</h2>
-      <p>This extension collects no personal data, stores nothing, and tracks nothing. It only reads publicly available information from Reddit's search index and displays it in your browser.</p>
+      <p>This extension collects no personal data and tracks nothing. It reads publicly available posts and comments from independent public archives and displays them in your browser. Your settings and reveal counters are stored only on your device.</p>
 
       <h2>What this extension does</h2>
-      <p>Profile Unhider is a Chrome extension that surfaces publicly indexed posts and comments for Reddit users who have set their profile to hidden. It does this by querying Reddit's public search API and surfacing the results directly in the browser.</p>
+      <p>Profile Unhider is a Chrome extension that surfaces publicly indexed posts and comments for Reddit users who have set their profile to hidden. It fetches that public data from independent archives and displays it inline on the profile page.</p>
 
       <h2>Data we collect</h2>
-      <p>We collect absolutely nothing. Specifically:</p>
+      <p>We collect absolutely nothing about you. Specifically:</p>
       <ul>
         <li>No personal information is collected or stored</li>
         <li>No browsing history is recorded</li>
@@ -68,15 +68,25 @@
         <li>No cookies are set</li>
         <li>No data is sent to any server we operate</li>
       </ul>
+      <p>The extension does store a few things locally on your device, in your browser's own storage: your theme choice, your profiles revealed and posts surfaced counters, whether you dismissed the rating nudge, and which version you last saw. This stays on your device and is never transmitted anywhere.</p>
 
       <h2>How it works</h2>
-      <p>When you visit a Reddit profile set to hidden, the extension makes direct requests from your browser to Reddit's public search API (<code>reddit.com/search.json</code>). Results are displayed after the page loads locally in your browser.</p>
+      <p>When you visit a Reddit profile set to hidden, your browser sends that profile's public username to a public archive to look up their public posts and comments. Results are displayed locally in your browser.</p>
 
       <h2>Data source</h2>
-      <p>All content displayed by this extension comes from Reddit's own public search index. Only content Reddit has already made publicly searchable is shown. This extension does not access, store, or redistribute private content.</p>
+      <p>All content displayed by this extension comes from public archives of public Reddit data: the Arctic Shift archive first, and PullPush as a fallback. Only content that was already public is shown. This extension does not access, store, or redistribute private content.</p>
 
       <h2>Third party services</h2>
-      <p>The extension communicates only with Reddit's public API endpoints. No other third-party services, SDKs, or analytics tools are used.</p>
+      <p>The extension communicates with the Arctic Shift public archive (arctic-shift.photon-reddit.com) and the PullPush public archive (api.pullpush.io) to fetch public posts and comments, and with Reddit itself for the pages you visit. No other third-party services, SDKs, or analytics tools are used.</p>
+
+      <h2>Permissions</h2>
+      <p>The extension asks for a small set of permissions, each tied to a feature:</p>
+      <ul>
+        <li><strong>Storage</strong> — saves your settings and counters on your device only</li>
+        <li><strong>Tabs</strong> — the popup's Refresh button reloads the current Reddit tab, and the welcome and support pages open in a new tab</li>
+        <li><strong>Active tab</strong> — lets the popup talk to the Reddit tab open when you click the extension icon</li>
+        <li><strong>Reddit access</strong> — runs the reveal panel on reddit.com profile pages, including old Reddit</li>
+      </ul>
 
       <h2>Changes to this policy</h2>
       <p>If this policy changes, the "last updated" date at the top of this page will be updated. Continued use of the extension constitutes acceptance of any updates.</p>
