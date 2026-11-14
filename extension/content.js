@@ -584,6 +584,47 @@
     return `<svg width="${w||11}" height="${w||11}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:block;flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   }
 
+  /* ── removed / deleted labels ──
+     Only from markers the archives actually carry, never guessed. Posts: the
+     removed_by_category field (moderator / reddit / automod_filtered / deleted), or the
+     archive's own removal_type note. Comments only have the removal_type note ("removed"
+     covers mods and Reddit, which the data can't tell apart, or "deleted" for the user)
+     and the [removed] / [deleted] text markers. No marker means no label, which is not
+     the same as "not removed". */
+  const FLAGS = {
+    mod:     { label: "Removed by mods" },
+    reddit:  { label: "Removed by Reddit" },
+    auto:    { label: "Filtered by AutoMod" },
+    removed: { label: "Removed" },
+    user:    { label: "Deleted by user" },
+  };
+  const FLAG_ICON = {
+    user: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+    other: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/></svg>',
+  };
+  function removalKind(item, kind) {
+    const meta = item._meta || {};
+    if (kind === "post") {
+      switch (item.removed_by_category) {
+        case "moderator": return "mod";
+        case "reddit": return "reddit";
+        case "automod_filtered": return "auto";
+        case "deleted": case "author": return "user";
+      }
+      if (meta.removal_type === "moderator") return "mod";
+      if (meta.removal_type === "reddit") return "reddit";
+      if (meta.removal_type === "deleted" || item.selftext === "[deleted]") return "user";
+      return null;
+    }
+    if (meta.removal_type === "deleted" || item.body === "[deleted]") return "user";
+    if (meta.removal_type === "removed" || item.body === "[removed]") return "removed";
+    return null;
+  }
+  // NSFW comes straight from the archive's over_18 field. On a comment it means the
+  // thread it was posted in is marked NSFW.
+  const nsfwPill = (item) => (item.over_18 === true ? '<span class="rpu-flag rpu-flag-nsfw">NSFW</span>' : "");
+  const flagPill = (k) => k ? `<span class="rpu-flag rpu-flag-${k}">${k === "user" ? FLAG_ICON.user : FLAG_ICON.other}${FLAGS[k].label}</span>` : "";
+
   function renderPost(p) {
     let thumbHtml;
     const hasThumb = p.thumbnail && !["self","default","nsfw","image","spoiler",""].includes(p.thumbnail) && p.thumbnail.startsWith("http");
@@ -609,7 +650,8 @@
             <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(p.subreddit)}/" target="_blank" rel="noopener">${esc(p.subreddit_name_prefixed || "r/" + p.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(p.created_utc)}</span>
-            ${p.over_18 ? '<span class="rpu-nsfw-tag">NSFW</span>' : ""}
+            ${nsfwPill(p)}
+            ${flagPill(removalKind(p, "post"))}
           </div>
           <a class="rpu-card-title" href="${ORIGIN}${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.title)}</a>
           <div class="rpu-card-footer">
@@ -643,6 +685,8 @@
             <a class="rpu-subreddit" href="${ORIGIN}/r/${esc(c.subreddit)}/" target="_blank" rel="noopener">${esc(c.subreddit_name_prefixed || "r/" + c.subreddit)}</a>
             <span class="rpu-dot">·</span>
             <span>${timeAgo(c.created_utc)}</span>
+            ${nsfwPill(c)}
+            ${flagPill(removalKind(c, "comment"))}
           </div>
           <a class="rpu-comment-thread" href="${commentUrl}" target="_blank" rel="noopener">
             ${commentIcon(11)} ${esc(c.link_title || "View thread")}
@@ -741,6 +785,23 @@
       </div>`;
   }
 
+  function renderRemovedSummary(data) {
+    const counts = { mod: 0, reddit: 0, auto: 0, removed: 0, user: 0 };
+    (data.postItems || []).forEach((p) => { const k = removalKind(p, "post"); if (k) counts[k]++; });
+    (data.commentItems || []).forEach((c) => { const k = removalKind(c, "comment"); if (k) counts[k]++; });
+    const total = Object.values(counts).reduce((a, n) => a + n, 0);
+    if (!total) return "";
+    const all = (data.postItems || []).length + (data.commentItems || []).length;
+    const parts = ["mod", "reddit", "auto", "removed", "user"].filter((k) => counts[k]);
+    return `
+      <div class="rpu-removed">
+        <div class="rpu-removed-top"><b>Removed and deleted</b><span>${total} of ${all} items</span></div>
+        <div class="rpu-removed-bar">${parts.map((k) => `<i class="rpu-flag-bg-${k}" style="width:${(counts[k] / total) * 100}%"></i>`).join("")}</div>
+        <div class="rpu-removed-legend">${parts.map((k) => `<div><i class="rpu-flag-bg-${k}"></i>${FLAGS[k].label}<b>${counts[k]}</b></div>`).join("")}</div>
+        <div class="rpu-removed-fine">Only items the archive re-checked carry a label, so the real number can be higher.</div>
+      </div>`;
+  }
+
   function renderInsights(data, heatMetric) {
     const entries = insightEntries(data);
     const maxTotal = entries.length ? entries[0].total : 1;
@@ -752,6 +813,7 @@
         <div class="rpu-insight-stat"><span class="rpu-insight-stat-num">${data.totalComments}</span><span class="rpu-insight-stat-label">comments</span></div>
       </div>
       ${renderHeat(data, heatMetric || "all")}
+      ${renderRemovedSummary(data)}
       ${entries.length ? `
       <div class="rpu-insight-search-wrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -803,6 +865,8 @@
           <button class="rpu-sort-btn" data-sort="top">Top</button>
           <button class="rpu-sort-btn" data-sort="relevance">Relevance</button>
         </div>
+        <button class="rpu-flag-filter" id="rpu-flag-filter" hidden>Removed or deleted <b id="rpu-flag-count">0</b></button>
+        <button class="rpu-flag-filter" id="rpu-nsfw-filter" hidden>NSFW <b id="rpu-nsfw-count">0</b></button>
         <div class="rpu-item-search-wrap">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" class="rpu-item-search" id="rpu-item-search" placeholder="Search…" autocomplete="off" />
@@ -919,6 +983,8 @@
       sort: "new",
       time: "all",
       heatMetric: "all",
+      flagOnly: false,
+      nsfwOnly: false,
       posts: step(kept.posts),
       comments: step(kept.comments),
       insights: { loaded: false, loading: false, data: null },
@@ -950,7 +1016,7 @@
 
     function clearContent() {
       const content = getEl("rpu-content");
-      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-heat, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
+      if (content) content.querySelectorAll(".rpu-card, .rpu-empty, .rpu-error, .rpu-insight-summary, .rpu-heat, .rpu-removed, .rpu-insight-search-wrap, .rpu-insight-list, .rpu-insight-note").forEach((el) => el.remove());
     }
 
     function itemMatches(tab, item, q) {
@@ -1009,7 +1075,18 @@
       }
 
       const query = (getEl("rpu-item-search").value || "").trim().toLowerCase();
-      const filtered = query ? items.filter((item) => itemMatches(tab, item, query)) : items;
+      const kindOf = tab === "posts" ? "post" : "comment";
+      const flaggedCount = items.filter((i) => removalKind(i, kindOf)).length;
+      const nsfwCount = items.filter((i) => i.over_18 === true).length;
+      if (!flaggedCount) state.flagOnly = false;
+      if (!nsfwCount) state.nsfwOnly = false;
+      const chip = getEl("rpu-flag-filter");
+      if (chip) { chip.hidden = !flaggedCount; chip.classList.toggle("on", state.flagOnly); getEl("rpu-flag-count").textContent = flaggedCount; }
+      const nchip = getEl("rpu-nsfw-filter");
+      if (nchip) { nchip.hidden = !nsfwCount; nchip.classList.toggle("on", state.nsfwOnly); getEl("rpu-nsfw-count").textContent = nsfwCount; }
+      let filtered = query ? items.filter((item) => itemMatches(tab, item, query)) : items;
+      if (state.flagOnly) filtered = filtered.filter((i) => removalKind(i, kindOf)); // both chips on = items that are both
+      if (state.nsfwOnly) filtered = filtered.filter((i) => i.over_18 === true);
       const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
       state[tab].page = Math.min(Math.max(state[tab].page, 0), totalPages - 1);
       const pageItems = filtered.slice(state[tab].page * PAGE_SIZE, (state[tab].page + 1) * PAGE_SIZE);
@@ -1018,7 +1095,7 @@
         content.insertAdjacentHTML("beforeend", `
           <div class="rpu-empty">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span>No ${tab} matching "${esc(query)}"</span>
+            <span>${query ? `No ${tab} matching "${esc(query)}"` : state.nsfwOnly && state.flagOnly ? `No removed or deleted NSFW ${tab}` : state.nsfwOnly ? `No NSFW ${tab}` : `No removed or deleted ${tab}`}</span>
           </div>`);
       } else {
         const html = pageItems.map((item) => tab === "posts" ? renderPost(item) : renderComment(item)).join("");
@@ -1207,6 +1284,8 @@
       state.activeTab = tab;
       panelEl.querySelectorAll(".rpu-tab").forEach((btn) => btn.classList.toggle("rpu-tab-active", btn.dataset.tab === tab));
       getEl("rpu-item-search").value = "";
+      state.flagOnly = false;
+      state.nsfwOnly = false;
       getEl("rpu-pagination").style.display = "none";
       clearContent();
       if (tab === "insights") {
@@ -1299,6 +1378,17 @@
         const tab = state.activeTab;
         if (state[tab].loaded) { state[tab].page = 0; renderItems(); }
       }
+
+      getEl("rpu-flag-filter").addEventListener("click", () => {
+        state.flagOnly = !state.flagOnly;
+        state[state.activeTab].page = 0;
+        renderItems();
+      });
+      getEl("rpu-nsfw-filter").addEventListener("click", () => {
+        state.nsfwOnly = !state.nsfwOnly;
+        state[state.activeTab].page = 0;
+        renderItems();
+      });
 
       // Search within loaded posts/comments
       getEl("rpu-item-search").addEventListener("input", () => {
