@@ -139,7 +139,7 @@
     var goodbyeReason = "";
 
     // Reinstall goes to the store for the visitor's browser (same pattern
-    // as the rating nudge in extension/content.js).
+    // as the rating nudge in extension/content/state.js).
     var goodbyeReinstall = document.getElementById("goodbye-reinstall");
     var reinstallHref = "https://chromewebstore.google.com/detail/profile-unhider/kgfaggmcfklfakaaoijpeldikdokgfmp";
     if (goodbyeReinstall && navigator.userAgent.indexOf("Firefox") !== -1) {

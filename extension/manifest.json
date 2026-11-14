@@ -24,8 +24,8 @@
   "content_scripts": [
     {
       "matches": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
-      "js": ["content.js","hovercard.js"],
-      "css": ["styles.css"],
+      "js": ["shared/storage.js", "content/config.js", "content/utils.js", "content/state.js", "content/detection.js", "content/api.js", "content/renderers.js", "content/panel.js", "content/content.js", "hovercard.js"],
+      "css": ["content/panel.css", "content/panel-views.css", "content/panel-features.css"],
       "run_at": "document_idle"
     }
   ]
