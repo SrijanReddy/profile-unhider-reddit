@@ -1,0 +1,14 @@
+{
+  "description": "Chrome/Firefox extension surfacing publicly indexed posts and comments for hidden Reddit profiles.",
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "name": "profile-unhider",
+  "private": true,
+  "scripts": {
+    "check": "node -e \"const fs=require('fs');const m=JSON.parse(fs.readFileSync('extension/manifest.json','utf8'));const files=[...m.content_scripts.flatMap(c=>[...(c.js||[]),...(c.css||[])])];const missing=files.filter(f=>!fs.existsSync('extension/'+f));if(missing.length){console.error('manifest lists missing files: '+missing.join(', '));process.exit(1);}\" && for f in extension/*.js extension/content/*.js extension/shared/*.js; do node --check \"$f\" || exit 1; done",
+    "format": "prettier --write extension website",
+    "zip": "cd extension && zip -rq ../profile-unhider.zip . -x '*.DS_Store'"
+  },
+  "version": "4.0"
+}
