@@ -3,8 +3,15 @@
   "name": "Profile Unhider",
   "version": "4.0",
   "description": "Surface publicly indexed posts and comments for hidden Reddit profiles. Data sourced from Reddit's public search index.",
-  "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.reddit.com/*",
+    "https://old.reddit.com/*"
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -23,9 +30,27 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.reddit.com/*", "https://old.reddit.com/*"],
-      "js": ["content.js","hovercard.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://www.reddit.com/*",
+        "https://old.reddit.com/*"
+      ],
+      "js": [
+        "shared/storage.js",
+        "content/config.js",
+        "content/utils.js",
+        "content/state.js",
+        "content/detection.js",
+        "content/api.js",
+        "content/renderers.js",
+        "content/panel.js",
+        "content/content.js",
+        "hovercard.js"
+      ],
+      "css": [
+        "content/panel.css",
+        "content/panel-views.css",
+        "content/panel-features.css"
+      ],
       "run_at": "document_idle"
     }
   ]
