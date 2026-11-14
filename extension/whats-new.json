@@ -73,6 +73,11 @@
         "desc": "See 26 weeks of activity at a glance in Insights"
       },
       {
+        "icon": "🚩",
+        "title": "Removed, deleted and NSFW tags",
+        "desc": "See which posts and comments were removed, deleted by the user or marked NSFW, and filter for them"
+      },
+      {
         "icon": "🔄",
         "title": "More reliable loading",
         "desc": "Switches servers automatically if one is slow or down"
